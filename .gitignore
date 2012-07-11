@@ -6,6 +6,7 @@
 # Normal rules
 #
 
+gitignore
 log.txt
 *.a
 *.o

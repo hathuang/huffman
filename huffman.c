@@ -5,6 +5,7 @@ http://dungenessbin.diandian.com/post/2012-05-23/21949784
 #include <string.h>
 
 #include "huffman.h"
+#include "sort.h"
 
 int add(int a, int b)
 {

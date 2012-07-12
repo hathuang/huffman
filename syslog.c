@@ -6,8 +6,6 @@
 #include <stdarg.h>
 #include <time.h>
 #include "syslog.h"
-//#include "config.h"
-#include "common.h"
 
 #define LOG_FILE  "./log.txt"
 #define _DEBUG_LEVEL              "DEBUG_LEVEL"

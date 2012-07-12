@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-I. -DDebug -g -O2
-DEPS = huffman.h
-OBJ = main.o huffman.o
+DEPS = huffman.h sort.h syslog.h
+OBJ = main.o huffman.o sort.o syslog.o
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)

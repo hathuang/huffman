@@ -6,6 +6,7 @@ extern int huffman_encode(char *encode_s);
 
 struct node {
         char data;
+        int priority;
         struct node *lnext;      
         struct node *rnext;
 };

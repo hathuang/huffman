@@ -29,6 +29,7 @@ int main(int argc, char *argv[])
                 printf("fail to bubble_sort\n");
         }
         printf("After bubble_sort=========================\n");
+        printf("After bubble_sort=========================\n");
         i = 0;
         while (i < ARR_SIZE) {
                 printf("arr[%04d] = %04d\n", i, *(arr+i));

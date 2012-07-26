@@ -66,32 +66,30 @@ int init_huffman_line(struct huffman_node **head, char *str)
         return 0;
 }
 
-int huffman_sort(struct huffman_line *line)
+int huffman_sort(struct huffman_node **head)
 {
         // only 255 elements in the line at most;
-        struct huffman_line *xline = NULL;
-        struct huffman_line *yline = NULL;
-        struct huffman_line *tline = NULL;
-        struct huffman_line *xpreline = NULL;
-        struct huffman_line *ypreline = NULL;
-       
-        if (line == NULL) {
+        struct huffman_node *p = *head;
+        struct huffman_node *q = NULL;
+        struct huffman_node *pre = NULL;
+        struct huffman_node *t = NULL;
+        
+        if (!p) {
+                syslog(LOG_USER | LOG_ERR , "%s : Ugly params.", __func__);
                 return -1;
-        } else if (line->next == NULL) {
+        } else if (p->next == NULL) {
                 return 0; // one element ONLY
         } 
 
-        xline = line;
-       
         // bubble sort
         do {
-                yline = xline->next;
-                ypreline = xline;
+                q = p->next;
+                pre = p;
                 do {
-                        if (xline->curr->priority > yline->curri->priority) {
+                        if (pre->priority > q->priority) {
                                 // exchange Be careful about it . FIXME
-                                tline = xline;
-                                xline->curr = yline->curr;
+                                t = p;
+                                p = yline->curr;
                                 xline->next = yline->next;
                                 if (xpreline) {
                                         xpreline->next = yline;
@@ -103,7 +101,7 @@ int huffman_sort(struct huffman_line *line)
                         ypreline = yline;
                 } while (yline = yline->next);
                 xpreline = xline;
-        } while (xline = xline->next);
+        } while (p = p->next);
 
         return 0;
 }

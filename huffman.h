@@ -4,12 +4,10 @@
 extern int add(int a, int b);
 extern int huffman_encode(char *encode_s);
 
-extern int node_distory(struct huffman_node **head);
-
 struct huffman_node {                   /* example         */
         char data;                      /* char o          */
         char bits;                      /* bits of newcode */
-        char newcode                    /*                 */
+        char newcode;                    /*                 */
         int priority;                   /* 5               */
         struct huffman_node *lnext;     /* ***             */     
         struct huffman_node *rnext;     /* ***             */

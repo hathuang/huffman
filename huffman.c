@@ -3,12 +3,11 @@ http://dungenessbin.diandian.com/post/2012-05-23/21949784
 */
 #include <stdio.h>
 #include <string.h>
-
+#include <stdlib.h>
 #include "huffman.h"
-#include "sort.h"
 #include "syslog.h"
 
-#ifdef DEBUG
+#ifdef Debug
 #define print_debug(x)     printf(x)
 #else
 #define print_debug(x)
@@ -57,8 +56,10 @@ int init_huffman_line(struct huffman_node **head, char *str)
                         pnode = (struct huffman_node *) malloc(sizeof(struct huffman_node)); 
                         if ((prenode->next = pnode) == NULL) {
                                 syslog(LOG_USER | LOG_ERR , "%s : fail to malloc for new node.", __func__);
-                                // TODO
+                                return -1;
                         }
+                        syslog(LOG_USER | LOG_INFO, "%s : new char = %c = 0x%02x", __func__, ch, ch);
+
                         pnode->data = ch;
                         pnode->bits = 0;
                         pnode->newcode = 0;
@@ -139,6 +140,13 @@ int huffman_sort(struct huffman_node **head, int flag)
         return 0;
 }
 
+int huffman_root2line(struct huffman_node **root, struct huffman_node **list)
+{
+        struct huffman_node *p = *root;
+
+
+}
+
 int huffman_code(struct huffman_node **root)
 {
         struct huffman_node *p = *root;
@@ -206,7 +214,7 @@ int huffman_tree(struct huffman_node **root)
                 return 0;
         } else {
                 node = (struct huffman_node *)malloc(sizeof(struct huffman_node));
-                if (new == NULL) {
+                if (node == NULL) {
                         syslog(LOG_USER | LOG_ERR , "%s : Fail to malloc.", __func__);
                         return -1;
                 }
@@ -215,12 +223,12 @@ int huffman_tree(struct huffman_node **root)
                 node->bits = 0; 
                 node->newcode = '\0'; 
                 node->priority = (*root)->priority + (*root)->next->priority;
-                if ((*root)->priority > (*root)->next->priority) { // bigger left
-                        node->lnext = (*root)->node;
-                        node->rnext = (*root)->next->node;
+                if ((*root)->priority > (*root)->next->priority) { // bigger right 
+                        node->lnext = *root;
+                        node->rnext = (*root)->next;
                 } else {
-                        node->rnext = (*root)->node;
-                        node->lnext = (*root)->next->node;
+                        node->rnext = *root;
+                        node->lnext = (*root)->next;
                 }
                 if ((*root)->next->next == NULL) { // two
                         *root = node;
@@ -259,70 +267,90 @@ int node_distory(struct huffman_node **head)
         return 0;
 }
 
-int print_newcode(struct huffman_node **head)
+int print_newcode(struct huffman_node **head, int flag)
 {
         struct huffman_node *p = *head;
         if (!p) {
                 printf("Ugly head\n");
                 return -1;
         }
+        printf("\nplace : %p\n", p);
+        if (flag)
+                syslog(LOG_USER | LOG_DEBUG, "%s : place : %p\n", __func__, p);
         do {
-                printf("Huffman : char = %c = 0x%02x, bits = %d, newcode = 0x%02x\n", p->data, p->data, p->bits, p->newcode);
+                printf("Huffman : char = %c = 0x%02x, bits = %d, newcode = 0x%02x, priority = %d\n",
+                        p->data, p->data, p->bits, p->newcode, p->priority);
+                if (flag)
+                        syslog(LOG_USER | LOG_DEBUG, "%s : char=%c=0x%02x,bits=%d,newcode=0x%02x,priority=%d,my=%p,next=%p,lnext=%p,rnext=%p",
+                        __func__, p->data, p->data, p->bits, p->newcode, p->priority, p, p->next, p->lnext, p->rnext);
         } while (p = p->next);
 }
 
 int huffman_encode(char *_str)
 {
-        struct huffman_node **head = NULL;
-        struct huffman_node *node = (struct huffman_node *)malloc(sizeof(struct huffman_node));
+        struct huffman_node *head = NULL;
+        struct huffman_node *node = NULL;
+        
+        head = (struct huffman_node *)malloc(sizeof(struct huffman_node));
+        
         char *src = _str;
 
-        if (!(*head = node)) {
+        print_debug("enter huffman\n");
+        syslog(LOG_SYSTEM | LOG_INFO, "%s : hello huffman", __func__);
+        if (!(node = head)) {
                 syslog(LOG_SYSTEM | LOG_ERR , "%s : Fail to malloc for head", __func__);
                 return -1;
         } else if (!src) {
                 syslog(LOG_USER | LOG_ERR , "%s : Ugly params.", __func__);
-                node_distory(head);
+                node_distory(&node);
                 return -1;
         }
         // make the src in the huffman line
         print_debug("start to init_huffman_line\n");
-        if (init_huffman_line(head, src)) {
+        syslog(LOG_SYSTEM | LOG_INFO, "%s : hello huffman line", __func__);
+        if (init_huffman_line(&head, src)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to init_huffman_line", __func__);
-                node_distory(head);
+                node_distory(&node);
                 return -1;
         }
         // sort the line
         print_debug("start to huffman_sort, small first\n");
-        if (huffman_sort(head, HUFFMAN_SORT_SMALL_FIRST)) {
+        if (huffman_sort(&head, HUFFMAN_SORT_SMALL_FIRST)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_sort small first", __func__);
-                node_distory(head);
+                node_distory(&node);
                 return -1;
         }
 
+        node = head;
         print_debug("start to huffman_tree\n");
-        if (huffman_tree(head)) {
+        syslog(LOG_USER | LOG_INFO, "%s : Before huffman_tree", __func__);
+        print_newcode(&node, 1); 
+        if (huffman_tree(&head)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_tree", __func__);
-                node_distory(head);
+                node_distory(&node);
                 return -1;
         }
+        print_debug("After huffman_tree\n");
+        syslog(LOG_USER | LOG_INFO, "%s : After huffman_tree", __func__);
+        print_newcode(&node, 1); 
         
         print_debug("start to huffman_code\n");
-        if (huffman_code(head)) {
+        if (huffman_code(&head)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_code", __func__);
-                node_distory(head);
+                node_distory(&node);
                 return -1;
         }
+        print_newcode(&node, 0); 
         
         print_debug("start to huffman_sort, big first\n");
-        if (huffman_sort(head, HUFFMAN_SORT_BIG_FIRST)) {
+        if (huffman_sort(&head, HUFFMAN_SORT_BIG_FIRST)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_sort big first", __func__);
-                node_distory(head);
+                node_distory(&node);
                 return -1;
         }
         print_debug("start to print_newcode\n");
-        print_newcode(head); 
+        print_newcode(&node, 0); 
         print_debug("All goes well...\n");
-        node_distory(head);
+        node_distory(&node);
         return 0;
 }

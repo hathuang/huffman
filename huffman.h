@@ -4,6 +4,8 @@
 extern int add(int a, int b);
 extern int huffman_encode(char *encode_s);
 
+extern int node_distory(struct huffman_node **head);
+
 struct huffman_node {                   /* example         */
         char data;                      /* char o          */
         char bits;                      /* bits of newcode */
@@ -13,11 +15,8 @@ struct huffman_node {                   /* example         */
         struct huffman_node *rnext;     /* ***             */
         struct huffman_node *next;      /* ***             */
 };
-/*
-struct huffman_line {
-        int priority;
-        struct huffman_node *node;
-        struct huffman_line *next;
-};
-*/
+
+#define HUFFMAN_SORT_BIG_FIRST          0x01
+#define HUFFMAN_SORT_SMALL_FIRST        0x02
+
 #endif // huffman.h

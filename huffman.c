@@ -3,168 +3,93 @@ http://dungenessbin.diandian.com/post/2012-05-23/21949784
 */
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 #include "huffman.h"
 #include "sort.h"
+#include "syslog.h"
 
 int add(int a, int b)
 {
         return a + b;
 }
 
-// huffman encode
-static int isnew(struct node *huffman_node, int size, char new)
-{
-        int i = 0;
-        if (!huffman_node) {
-                return -1;
-        } 
-        while (i < size) {
-                if (new == huffman_node[i].data) {
-                        huffman_node[i].priority++;
-                        return 0; // the same
-                } 
-        }
-        huffman_node[size].data = new;
-        huffman_node[size].priority++;
-        return 1;
-}
-
-static int make_tree(struct node *node, int num)
-{
-        int i, j;
-
-        if (num <= 0) {
-                return -1;
-        } 
-        if (num == 1) {
-                return 0;
-        } 
-
-        // use malloc to do it 
-
-
-
-        num--;
-        return make_tree(node, num);
-/*
-        if (node == NULL || num < 0) {
-                return -1; 
-        }
-        if (num <= 1) {
-                return 0;
-        } 
-
-        for (i = 0; i < num - 1; i++) {
-                for (j = i + 1; j < num; j++) {
-                        if (node[i].priority > node[j].priority) {
-                                // exchange 
-                                node[j].priority = node[i].priority ^ node[j].priority;   
-                                node[i].priority = node[i].priority ^ node[j].priority;  
-                                node[j].priority = node[i].priority ^ node[j].priority; 
-                                
-                                node[j].data = node[i].data ^ node[j].data;
-                                node[i].data = node[i].data ^ node[j].data;
-                                node[j].data = node[i].data ^ node[j].data;
-                                
-                                node[j].rnext = node[i].rnext ^ node[j].rnext;
-                                node[i].rnext = node[i].rnext ^ node[j].rnext;
-                                node[j].rnext = node[i].rnext ^ node[j].rnext;
-                                
-                                node[j].lnext = node[i].lnext ^ node[j].lnext;
-                                node[i].lnext = node[i].lnext ^ node[j].lnext;
-                                node[j].lnext = node[i].lnext ^ node[j].lnext;
-                        } 
-                }
-        }
-        return 0;
-*/
-}
-
-int init_huffman_line(struct huffman_node *node, struct huffman_line *line, char *str)
+int init_huffman_line(struct huffman_node **head, char *str)
 {
         unsigned int i;
         char ch;
-        struct huffman_line *pline = NULL;
-        struct huffman_line *preline = NULL;
+        char *src = str;
+        struct huffman_node *node = *head;
         struct huffman_node *pnode = NULL;
+        struct huffman_node *prenode= NULL;
         
-        if (!node || !line || !str) {
-                printf("ugly params\n");
+        if (!node || !src) {
+                syslog(LOG_USER | LOG_ERR , "%s : Ugly params.", __func__);
                 return -1;
         } 
 
-        // first
+        // first node
         node->data = *(src + 0);
+        node->bits = 0;
         node->newcode = 0;
         node->priority = 1;
         node->lnext = NULL;
         node->rnext = NULL;
+        node->next = NULL;
 
-        line->curr = node; 
-        line->next = NULL; 
-        
         i = 1;
         while (ch = *(src + i)) {
-                pline = line;
+                pnode = node;
                 do {
-                        if (pline->curr->data == ch) {
-                                pline->curr->priority++;
+                        if (pnode->data == ch) {
+                                pnode->priority++;
                                 break;
                         }
-                        preline = pline;
-                } while (pline = pline->next);
-                if (!pline) {
+                        prenode = pnode;
+                } while (pnode = pnode->next);
+                if (!pnode) {
                         // new
-                        preline->next = (struct huffman_line *) malloc(sizeof(struct huffman_line));
-                        if ((pline = preline->next) == NULL) {
-                                perror("fail to malloc for new line");
-                                // TODO
-                        }
-                        pline->next = NULL;
-                        pline->curr = (struct huffman_node *) malloc(sizeof(struct huffman_node)); 
-                        if ((pnode = pline->curr) == NULL) {
-                                perror("fail to malloc for new node");
+                        pnode = (struct huffman_node *) malloc(sizeof(struct huffman_node)); 
+                        if ((prenode->next = pnode) == NULL) {
+                                syslog(LOG_USER | LOG_ERR , "%s : fail to malloc for new node.", __func__);
                                 // TODO
                         }
                         pnode->data = ch;
+                        pnode->bits = 0;
                         pnode->newcode = 0;
                         pnode->priority = 1;
                         pnode->lnext = NULL;
                         pnode->rnext = NULL;
+                        pnode->next = NULL;
                 }
                 ++i;
         }
         return 0;
 }
 
-int huffman_sort(struct huffman_line *line)
+int huffman_sort(struct huffman_node **head)
 {
         // only 255 elements in the line at most;
-        struct huffman_line *xline = NULL;
-        struct huffman_line *yline = NULL;
-        struct huffman_line *tline = NULL;
-        struct huffman_line *xpreline = NULL;
-        struct huffman_line *ypreline = NULL;
-       
-        if (line == NULL) {
+        struct huffman_node *p = *head;
+        struct huffman_node *q = NULL;
+        struct huffman_node *pre = NULL;
+        struct huffman_node *t = NULL;
+        
+        if (!p) {
+                syslog(LOG_USER | LOG_ERR , "%s : Ugly params.", __func__);
                 return -1;
-        } else if (line->next == NULL) {
+        } else if (p->next == NULL) {
                 return 0; // one element ONLY
         } 
 
-        xline = line;
-       
         // bubble sort
         do {
-                yline = xline->next;
-                ypreline = xline;
+                q = p->next;
+                pre = p;
                 do {
-                        if (xline->curr->priority > yline->curri->priority) {
+                        if (pre->priority > q->priority) {
                                 // exchange Be careful about it . FIXME
-                                tline = xline;
-                                xline->curr = yline->curr;
+                                t = p;
+                                p = yline->curr;
                                 xline->next = yline->next;
                                 if (xpreline) {
                                         xpreline->next = yline;
@@ -176,8 +101,88 @@ int huffman_sort(struct huffman_line *line)
                         ypreline = yline;
                 } while (yline = yline->next);
                 xpreline = xline;
-        } while (xline = xline->next);
+        } while (p = p->next);
 
         return 0;
 }
 
+int huffman_code(struct huffman_node **root)
+{
+        struct huffman_node *p = *root;
+        
+        if (p == NULL) {
+                return -1;
+        }
+        if (p->rnext) {
+                p->rnext->bits = p->bits + 1;
+                p->rnext->newcode = (p->newcode << 1) | 0x01;  // right : 1
+                if (huffman_code(&(p->rnext))) {
+                        return -1;
+                }
+        }
+        if (p->lnext) {
+                p->lnext->bits = p->bits + 1;
+                p->lnext->newcode = (p->newcode << 1) & 0xfe;  // left  : 0 
+                if (huffman_code(&(p->lnext))) {
+                        return -1;
+                }
+        }
+        return 0;
+}
+
+int huffman_insert_sort(struct huffman_node **_head, struct huffman_node *new)
+{
+        struct huffman_node *head = *_head;
+
+        if (!head) {
+                return -1;
+        }
+        
+        
+}
+
+int huffman_tree(struct huffman_node **root)
+{
+        struct huffman_node *node = NULL;
+        
+        if ((*root) == NULL) {
+                return -1;
+        } 
+        if ((*root)->next == NULL) { // one
+                return 0;
+        } else {
+                node = (struct huffman_node *)malloc(sizeof(struct huffman_node));
+                if (new == NULL) {
+                        return -1;
+                }
+                node->next = NULL;
+                node->data = '\0'; 
+                node->bits = 0; 
+                node->newcode = '\0'; 
+                node->priority = (*root)->priority + (*root)->next->priority;
+                if ((*root)->priority > (*root)->next->priority) { // bigger left
+                        node->lnext = (*root)->node;
+                        node->rnext = (*root)->next->node;
+                } else {
+                        node->rnext = (*root)->node;
+                        node->lnext = (*root)->next->node;
+                }
+                if ((*root)->next->next == NULL) { // two
+                        *root = node;
+                        return 0;
+                } else { // three or more
+                        *root = (*root)->next->next;
+                        if (huffman_insert_sort(root, node)) {
+                                return -1;
+                        } else {
+                                return huffman_tree(root);
+                        }
+                } 
+        }
+        
+        return -1;
+}
+
+int huffman_encode(char *encode_s)
+{
+}

@@ -8,6 +8,7 @@
 
 gitignore
 log.txt
+log.bak.txt
 *.a
 *.o
 *~

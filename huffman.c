@@ -292,12 +292,56 @@ int print_newcode(struct huffman_node **head, int flag)
                         syslog(LOG_USER | LOG_DEBUG, "%s : char=%c=0x%02x,bits=%d,newcode=0x%02x,priority=%d,my=%p,next=%p,lnext=%p,rnext=%p",
                         __func__, p->data, p->data, p->bits, p->newcode, p->priority, p, p->next, p->lnext, p->rnext);
         } while (p = p->next);
+        
+        return 0;
+}
+
+int huffman_array(struct huffman_node **_head, char (*arr)[2])
+{
+        struct huffman_node *q = *_head;
+        int n;
+
+        if (!q || !arr) {
+                syslog(LOG_USER | LOG_ERR , "%s : Ugly params", __func__);
+                return -1;
+        }
+/*      
+ array arch :
+ ------------------------------------
+ 0 | bits     |
+ ------------------------------------
+ 1 | new code |
+ ------------------------------------
+ */
+        do {
+                if (q->data) {
+                        n = (q->data) & 0x00ff;
+                        arr[n][0] = q->bits;
+                        arr[n][1] = q->newcode;
+                        syslog(LOG_SYSTEM | LOG_INFO, "%s : arr[%c][0]=%d, newcode=0x%x", __func__, q->data, arr[n][0], arr[n][1]);
+                }
+        } while (q = q->next);
+        
+        return 0;
+}
+
+int huffman_compression(char (*arr)[2], char *src)
+{
+        syslog(LOG_SYSTEM | LOG_INFO, "%s : arr['b'][bits]=%d, newcode=0x%x", __func__, arr['b'][0], arr['b'][1]);
+        syslog(LOG_SYSTEM | LOG_INFO, "%s : arr['e'][bits]=%d, newcode=0x%x", __func__, arr['e'][0], arr['e'][1]);
+        return 0;
+}
+
+int huffman_decompression()
+{
+        return 0;
 }
 
 int huffman_encode(char *_str)
 {
         struct huffman_node *head = NULL;
         struct huffman_node *node = NULL;
+        char array[256][2];
         
         head = (struct huffman_node *)malloc(sizeof(struct huffman_node));
         
@@ -351,14 +395,30 @@ int huffman_encode(char *_str)
         print_newcode(&node, 1); 
         
         print_debug("start to huffman_sort, big first\n");
-        if (huffman_sort(&head, HUFFMAN_SORT_BIG_FIRST)) {
-                syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_sort big first", __func__);
+        //if (huffman_sort(&head, HUFFMAN_SORT_BIG_FIRST)) {
+        //syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_sort big first", __func__);
+        //node_distory(&node);
+        //return -1;
+        //}
+        
+        if (huffman_array(&node, array)) {
+                syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_array", __func__);
                 node_distory(&node);
                 return -1;
         }
-        print_debug("start to print_newcode\n");
-        print_newcode(&node, 0); 
-        print_debug("All goes well...\n");
+        // distory the node, no need any more. 
         node_distory(&node);
+        // Compression 
+        if (huffman_compression(array, src)) {
+                syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_compression", __func__);
+                return -1;
+        }
+        // Decompression 
+        if (huffman_decompression()) {
+                syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_decompression", __func__);
+                return -1;
+        }
+
+        print_debug("All goes well...\n");
         return 0;
 }

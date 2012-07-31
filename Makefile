@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-I. -DDebug -g -O2
+CFLAGS=-I. -DDebug -g
 DEPS = huffman.h syslog.h
 OBJ = main.o huffman.o syslog.o
 

@@ -144,7 +144,26 @@ int huffman_root2line(struct huffman_node **root, struct huffman_node **list)
 {
         struct huffman_node *p = *root;
 
-
+        if (p == NULL) {
+                return -1;
+        }
+        if (p->rnext) {
+                p->rnext->bits = p->bits + 1;
+                p->rnext->newcode = (p->newcode << 1) | 0x01;  // right : 1
+                if (huffman_code(&(p->rnext))) {
+                        syslog(LOG_USER | LOG_ERR , "%s : Fail to right hand huffman_code.", __func__);
+                        return -1;
+                }
+        }
+        if (p->lnext) {
+                p->lnext->bits = p->bits + 1;
+                p->lnext->newcode = (p->newcode << 1) & 0xfe;  // left  : 0 
+                if (huffman_code(&(p->lnext))) {
+                        syslog(LOG_USER | LOG_ERR , "%s : Fail to left hand huffman_code.", __func__);
+                        return -1;
+                }
+        }
+        
 }
 
 int huffman_code(struct huffman_node **root)
@@ -177,16 +196,26 @@ int huffman_insert_sort(struct huffman_node **_head, struct huffman_node *new)
 {
         struct huffman_node *q = *_head;
         struct huffman_node *p = NULL;
+        struct huffman_node *pre = NULL;
 
         if (!q || !new) {
                 return -1;
         }
         // small first
-        if (q->priority >= new->priority) {
+        if (q->priority > new->priority) {
                 new->next = q;
                 *_head = new;
                 return 0;
-        } 
+        } else if (q->priority == new->priority) {
+                p = new->rnext;
+                if (!p) {
+                        // impossible
+                        return -1;
+                }
+                new->next = p->next;
+                p->next = new;
+                return 0;
+        }
         p = q;
         while (q = p->next) {
                 if (p->priority <= new->priority && new->priority <= q->priority) {
@@ -209,7 +238,7 @@ int huffman_tree(struct huffman_node **root)
         
         if ((*root) == NULL) {
                 return -1;
-        } 
+        }
         if ((*root)->next == NULL) { // one
                 return 0;
         } else {
@@ -222,8 +251,10 @@ int huffman_tree(struct huffman_node **root)
                 node->data = '\0'; 
                 node->bits = 0; 
                 node->newcode = '\0'; 
-                node->priority = (*root)->priority + (*root)->next->priority;
-                if ((*root)->priority > (*root)->next->priority) { // bigger right 
+                node->priority = (*root)->priority + (*root)->next->priority; // FIXME
+                syslog(LOG_USER | LOG_INFO, "%s : new node place:%p,priority=%d,root:%p, root->next:%p", __func__, node, node->priority, (*root), (*root)->next);
+                
+                if ((*root)->priority < (*root)->next->priority) { // bigger right 
                         node->lnext = *root;
                         node->rnext = (*root)->next;
                 } else {
@@ -231,6 +262,8 @@ int huffman_tree(struct huffman_node **root)
                         node->lnext = (*root)->next;
                 }
                 if ((*root)->next->next == NULL) { // two
+                        syslog(LOG_USER | LOG_DEBUG, "%s : node p: %p, node->priority=%d", __func__, node, node->priority);
+                        (*root)->next->next = node;
                         *root = node;
                         return 0;
                 } else { // three or more
@@ -241,7 +274,7 @@ int huffman_tree(struct huffman_node **root)
                         } else {
                                 return huffman_tree(root);
                         }
-                } 
+                }
         }
         syslog(LOG_USER | LOG_ERR , "%s : Unkown error, out of control.", __func__);
         

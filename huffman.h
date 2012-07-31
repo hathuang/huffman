@@ -8,7 +8,7 @@ struct huffman_node {                   /* example         */
         char data;                      /* char o          */
         char bits;                      /* bits of newcode */
         char newcode;                    /*                 */
-        int priority;                   /* 5               */
+        unsigned int priority;                   /* 5               */
         struct huffman_node *lnext;     /* ***             */     
         struct huffman_node *rnext;     /* ***             */
         struct huffman_node *next;      /* ***             */

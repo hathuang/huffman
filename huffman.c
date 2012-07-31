@@ -140,32 +140,6 @@ int huffman_sort(struct huffman_node **head, int flag)
         return 0;
 }
 
-int huffman_root2line(struct huffman_node **root, struct huffman_node **list)
-{
-        struct huffman_node *p = *root;
-
-        if (p == NULL) {
-                return -1;
-        }
-        if (p->rnext) {
-                p->rnext->bits = p->bits + 1;
-                p->rnext->newcode = (p->newcode << 1) | 0x01;  // right : 1
-                if (huffman_code(&(p->rnext))) {
-                        syslog(LOG_USER | LOG_ERR , "%s : Fail to right hand huffman_code.", __func__);
-                        return -1;
-                }
-        }
-        if (p->lnext) {
-                p->lnext->bits = p->bits + 1;
-                p->lnext->newcode = (p->newcode << 1) & 0xfe;  // left  : 0 
-                if (huffman_code(&(p->lnext))) {
-                        syslog(LOG_USER | LOG_ERR , "%s : Fail to left hand huffman_code.", __func__);
-                        return -1;
-                }
-        }
-        
-}
-
 int huffman_code(struct huffman_node **root)
 {
         struct huffman_node *p = *root;
@@ -196,7 +170,6 @@ int huffman_insert_sort(struct huffman_node **_head, struct huffman_node *new)
 {
         struct huffman_node *q = *_head;
         struct huffman_node *p = NULL;
-        struct huffman_node *pre = NULL;
 
         if (!q || !new) {
                 return -1;
@@ -214,6 +187,7 @@ int huffman_insert_sort(struct huffman_node **_head, struct huffman_node *new)
                 }
                 new->next = p->next;
                 p->next = new;
+                *_head = new;
                 return 0;
         }
         p = q;
@@ -235,6 +209,8 @@ int huffman_insert_sort(struct huffman_node **_head, struct huffman_node *new)
 int huffman_tree(struct huffman_node **root)
 {
         struct huffman_node *node = NULL;
+        struct huffman_node *p = NULL;
+        int ret = -1;
         
         if ((*root) == NULL) {
                 return -1;
@@ -251,10 +227,9 @@ int huffman_tree(struct huffman_node **root)
                 node->data = '\0'; 
                 node->bits = 0; 
                 node->newcode = '\0'; 
-                node->priority = (*root)->priority + (*root)->next->priority; // FIXME
-                syslog(LOG_USER | LOG_INFO, "%s : new node place:%p,priority=%d,root:%p, root->next:%p", __func__, node, node->priority, (*root), (*root)->next);
+                node->priority = (*root)->priority + (*root)->next->priority;
                 
-                if ((*root)->priority < (*root)->next->priority) { // bigger right 
+                if ((*root)->priority <= (*root)->next->priority) { // bigger right 
                         node->lnext = *root;
                         node->rnext = (*root)->next;
                 } else {
@@ -262,12 +237,12 @@ int huffman_tree(struct huffman_node **root)
                         node->lnext = (*root)->next;
                 }
                 if ((*root)->next->next == NULL) { // two
-                        syslog(LOG_USER | LOG_DEBUG, "%s : node p: %p, node->priority=%d", __func__, node, node->priority);
                         (*root)->next->next = node;
                         *root = node;
                         return 0;
                 } else { // three or more
-                        *root = (*root)->next->next;
+                        p = (*root)->next->next;
+                        *root = p;
                         if (huffman_insert_sort(root, node)) {
                                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_insert_sort.", __func__);
                                 return -1;
@@ -373,7 +348,7 @@ int huffman_encode(char *_str)
                 node_distory(&node);
                 return -1;
         }
-        print_newcode(&node, 0); 
+        print_newcode(&node, 1); 
         
         print_debug("start to huffman_sort, big first\n");
         if (huffman_sort(&head, HUFFMAN_SORT_BIG_FIRST)) {

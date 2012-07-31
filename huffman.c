@@ -329,6 +329,51 @@ int huffman_compression(char (*arr)[2], char *src)
 {
         syslog(LOG_SYSTEM | LOG_INFO, "%s : arr['b'][bits]=%d, newcode=0x%x", __func__, arr['b'][0], arr['b'][1]);
         syslog(LOG_SYSTEM | LOG_INFO, "%s : arr['e'][bits]=%d, newcode=0x%x", __func__, arr['e'][0], arr['e'][1]);
+        
+        char ch = '\0';
+        char newchar = '\0';
+        char *str = src;
+        int n;
+        unsigned int i = 0;
+        char bits = 0;
+        char flag = 0;
+
+        #define ONE_CHAR 8
+        //arr[ch][0] // bits
+        //arr[ch][1] // newcode
+        while (ch = *(str + i++)) {
+                n = ch & 0x00ff;
+                bits = arr[n][0];
+                flag += bits;
+                syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression # : %c, flag = %d, bits=%d", __func__, ch, flag, bits);
+                if (flag < ONE_CHAR) {
+                        newchar = newchar << bits;
+                        newchar |= arr[n][1] & ((1 << bits) - 1);
+                        continue;         
+                } else if (flag == ONE_CHAR) {
+                        newchar = newchar << bits;
+                        newchar |= arr[n][1] & ((1 << bits) - 1);
+                        // write newchar  ONE_CHAR
+                        
+                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression = : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+                        newchar = 0;
+                        flag = 0;
+                } else {
+                        newchar = newchar << (ONE_CHAR - (flag - bits));
+                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression x :%d", __func__, ONE_CHAR - (flag - bits));
+                        newchar |= (arr[n][1] >> (flag - ONE_CHAR)) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
+                        // write newchar  ONE_CHAR
+                        
+                        flag = flag - ONE_CHAR;
+                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+                        newchar = arr[n][1] & ((1 << flag) - 1);
+                }
+        }
+        if (flag) {
+                // write;
+                syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+        }
+        
         return 0;
 }
 

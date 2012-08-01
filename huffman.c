@@ -9,8 +9,10 @@ http://dungenessbin.diandian.com/post/2012-05-23/21949784
 
 #ifdef Debug
 #define print_debug(x)     printf(x)
+//#define syslog(x,y,z) Syslog(x,y,z) 
 #else
 #define print_debug(x)
+//#define syslog(x,y,z) do{}while(0)
 #endif
 
 int add(int a, int b)
@@ -18,7 +20,7 @@ int add(int a, int b)
         return a + b;
 }
 
-int init_huffman_line(struct huffman_node **head, char *str)
+int init_huffman_line(struct huffman_node **head, char *str, unsigned int length)
 {
         unsigned int i;
         char ch;
@@ -27,7 +29,7 @@ int init_huffman_line(struct huffman_node **head, char *str)
         struct huffman_node *pnode = NULL;
         struct huffman_node *prenode= NULL;
         
-        if (!node || !src) {
+        if (!node || !src || !length) {
                 syslog(LOG_USER | LOG_ERR , "%s : Ugly params.", __func__);
                 return -1;
         } 
@@ -42,7 +44,8 @@ int init_huffman_line(struct huffman_node **head, char *str)
         node->next = NULL;
 
         i = 1;
-        while (ch = *(src + i)) {
+        while (i < length) {
+                ch = *(src + i++);
                 pnode = node;
                 do {
                         if (pnode->data == ch) {
@@ -68,7 +71,6 @@ int init_huffman_line(struct huffman_node **head, char *str)
                         pnode->rnext = NULL;
                         pnode->next = NULL;
                 }
-                ++i;
         }
         return 0;
 }
@@ -132,9 +134,7 @@ int huffman_sort(struct huffman_node **head, int flag)
                                 break;
                         default: break;
                         }
-
-
-                } 
+                }
         } while (p = p->next);
 
         return 0;
@@ -148,7 +148,8 @@ int huffman_code(struct huffman_node **root)
                 return -1;
         }
         if (p->rnext) {
-                p->rnext->bits = p->bits + 1;
+                p->rnext->bits &= 0x80; 
+                p->rnext->bits |= (p->bits & 0x07) + 1;         // it is < 7
                 p->rnext->newcode = (p->newcode << 1) | 0x01;  // right : 1
                 if (huffman_code(&(p->rnext))) {
                         syslog(LOG_USER | LOG_ERR , "%s : Fail to right hand huffman_code.", __func__);
@@ -156,7 +157,8 @@ int huffman_code(struct huffman_node **root)
                 }
         }
         if (p->lnext) {
-                p->lnext->bits = p->bits + 1;
+                p->lnext->bits &= 0x80; 
+                p->lnext->bits |= (p->bits & 0x07) + 1;         // it is < 7
                 p->lnext->newcode = (p->newcode << 1) & 0xfe;  // left  : 0 
                 if (huffman_code(&(p->lnext))) {
                         syslog(LOG_USER | LOG_ERR , "%s : Fail to left hand huffman_code.", __func__);
@@ -225,7 +227,7 @@ int huffman_tree(struct huffman_node **root)
                 }
                 node->next = NULL;
                 node->data = '\0'; 
-                node->bits = 0; 
+                node->bits = 0x80; // means not the code form the file or str 
                 node->newcode = '\0'; 
                 node->priority = (*root)->priority + (*root)->next->priority;
                 
@@ -314,18 +316,21 @@ int huffman_array(struct huffman_node **_head, char (*arr)[2])
  ------------------------------------
  */
         do {
-                if (q->data) {
-                        n = (q->data) & 0x00ff;
-                        arr[n][0] = q->bits;
-                        arr[n][1] = q->newcode;
-                        syslog(LOG_SYSTEM | LOG_INFO, "%s : arr[%c][0]=%d, newcode=0x%x", __func__, q->data, arr[n][0], arr[n][1]);
+                //if (q->data) {
+                if ((q->bits) & 0x80) {
+                        syslog(LOG_SYSTEM | LOG_INFO, "%s : is = 0x%x", __func__, q->bits & 0xff);
+                        continue;
                 }
+                n = (q->data) & 0x00ff;
+                arr[n][0] = q->bits;
+                arr[n][1] = q->newcode;
+                syslog(LOG_SYSTEM | LOG_INFO, "%s : arr[%c][0]=%d, newcode=0x%x", __func__, q->data, arr[n][0], arr[n][1]);
         } while (q = q->next);
         
         return 0;
 }
 
-int huffman_compression(char (*arr)[2], char *src)
+int huffman_compression(char (*arr)[2], char *src, unsigned int length)
 {
         syslog(LOG_SYSTEM | LOG_INFO, "%s : arr['b'][bits]=%d, newcode=0x%x", __func__, arr['b'][0], arr['b'][1]);
         syslog(LOG_SYSTEM | LOG_INFO, "%s : arr['e'][bits]=%d, newcode=0x%x", __func__, arr['e'][0], arr['e'][1]);
@@ -341,7 +346,8 @@ int huffman_compression(char (*arr)[2], char *src)
         #define ONE_CHAR 8
         //arr[ch][0] // bits
         //arr[ch][1] // newcode
-        while (ch = *(str + i++)) {
+        while (i < length) {
+                ch = *(str + i++);
                 n = ch & 0x00ff;
                 bits = arr[n][0];
                 flag += bits;
@@ -382,7 +388,7 @@ int huffman_decompression()
         return 0;
 }
 
-int huffman_encode(char *_str)
+int huffman_encode(char *_str, unsigned int length)
 {
         struct huffman_node *head = NULL;
         struct huffman_node *node = NULL;
@@ -397,7 +403,7 @@ int huffman_encode(char *_str)
         if (!(node = head)) {
                 syslog(LOG_SYSTEM | LOG_ERR , "%s : Fail to malloc for head", __func__);
                 return -1;
-        } else if (!src) {
+        } else if (!src || !length) {
                 syslog(LOG_USER | LOG_ERR , "%s : Ugly params.", __func__);
                 node_distory(&node);
                 return -1;
@@ -405,7 +411,7 @@ int huffman_encode(char *_str)
         // make the src in the huffman line
         print_debug("start to init_huffman_line\n");
         syslog(LOG_SYSTEM | LOG_INFO, "%s : hello huffman line", __func__);
-        if (init_huffman_line(&head, src)) {
+        if (init_huffman_line(&head, src, length)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to init_huffman_line", __func__);
                 node_distory(&node);
                 return -1;
@@ -454,7 +460,7 @@ int huffman_encode(char *_str)
         // distory the node, no need any more. 
         node_distory(&node);
         // Compression 
-        if (huffman_compression(array, src)) {
+        if (huffman_compression(array, src, length)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_compression", __func__);
                 return -1;
         }

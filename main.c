@@ -4,7 +4,15 @@
 #include "huffman.h"
 #include "sort.h"
 #include "syslog.h"
+#include <string.h>
 
+#ifdef Debug
+//#define syslog(x) Syslog(x) 
+//#define init_syslog(x) init_Syslog(x) 
+#else
+//#define syslog(x) do{}while(0)
+//#define init_syslog(x)
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -17,7 +25,7 @@ int main(int argc, char *argv[])
 
         printf("start to huffman\n");
         printf("sizeof (struct huffman_header) = %d\n", sizeof (struct huffman_header));
-        if (huffman_encode(buf)) {
+        if (huffman_encode(buf, strlen(buf))) {
                 printf("error to huffman\n");
         } 
         printf("Good !\n");

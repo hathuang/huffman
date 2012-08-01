@@ -1,9 +1,6 @@
 #ifndef HUFFMAN_H
 #define HUFFMAN_H
 
-extern int add(int a, int b);
-extern int huffman_encode(char *encode_s, unsigned int length);
-
 struct huffman_node {                   /* example         */
         char data;                      /* char o          */
         char bits;                      /* bits of newcode 0-8 */
@@ -16,6 +13,9 @@ struct huffman_node {                   /* example         */
 
 #define HUFFMAN_SORT_BIG_FIRST          0x01
 #define HUFFMAN_SORT_SMALL_FIRST        0x02
+#define TMP_FILE         "test.tmp"
+#define SRC_FILE         "Screenshot.png"
+
 
 struct huffman_header {
         char name[128];         /* test.mp3        */
@@ -29,10 +29,10 @@ struct huffman_header {
         char password[32];       /* 123 */
         char mtime[32];
         
-        char data[256];
-        char bits[128];
+        /*char data[256];*/
+        char bits[256];
         char newcode[256];
-        char fillbits[128];
+        char fillbits[256];
 };
 
 struct tar_header {
@@ -55,5 +55,7 @@ struct tar_header {
         char padding[12];
 };
 
+extern int add(int a, int b);
+extern int huffman_encode(char *encode_s, unsigned int length, struct huffman_header *header);
 
 #endif // huffman.h

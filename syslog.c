@@ -36,7 +36,7 @@ int syslog(int priority, const char *_format,...)
 {
 	int pri=priority&0x00000007;
 	int fac=priority&0x00000078;
-        int DebugLevel = 7;
+        int DebugLevel = 6;
 	
         if(DebugLevel < pri)
 		return 0;

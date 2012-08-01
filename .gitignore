@@ -13,5 +13,9 @@ tags
 *.a
 *.o
 *~
+*.tmp
+*.mp3
+*.jpg
+*.png
 huffman
 *.swp

@@ -16,6 +16,7 @@ int main(int argc, char *argv[])
 
 
         printf("start to huffman\n");
+        printf("sizeof (struct huffman_header) = %d\n", sizeof (struct huffman_header));
         if (huffman_encode(buf)) {
                 printf("error to huffman\n");
         } 

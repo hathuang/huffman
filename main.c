@@ -1,13 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "huffman.h"
-#include "sort.h"
-#include "syslog.h"
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include "huffman.h"
+#include "syslog.h"
 
 #ifdef Debug
 //#define syslog(x) Syslog(x) 
@@ -52,6 +51,12 @@ int main(int argc, char *argv[])
         fseek(fp, 0, SEEK_END);
         long file_len = ftell(fp);
         fclose(fp);
+        header->size[0] = (file_len >> 0) & 0xff;
+        header->size[1] = (file_len >> 8) & 0xff;
+        header->size[2] = (file_len >> 16) & 0xff;
+        header->size[3] = (file_len >> 24) & 0xff;
+        
+        printf("file length = %ld\n", file_len);
         _buf = (char *)malloc(file_len * (sizeof(char)));
         if (_buf == NULL) {
                 perror("Fail to malloc for _buf");

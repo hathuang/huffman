@@ -64,7 +64,7 @@ int init_huffman_line(struct huffman_node **head, char *str, unsigned int length
                                 syslog(LOG_USER | LOG_ERR , "%s : fail to malloc for new node.", __func__);
                                 return -1;
                         }
-                        syslog(LOG_USER | LOG_INFO, "%s : new char = %c = 0x%02x", __func__, ch, ch);
+                        //syslog(LOG_USER | LOG_DEBUG, "%s : new char = %c = 0x%02x", __func__, ch, ch);
 
                         pnode->data = ch;
                         pnode->bits = 0;
@@ -288,14 +288,25 @@ int print_newcode(struct huffman_node **head, int flag)
                 return -1;
         }
         printf("\nplace : %p\n", p);
-        if (flag)
-                syslog(LOG_USER | LOG_DEBUG, "%s : place : %p\n", __func__, p);
+        //if (flag)
+        //syslog(LOG_USER | LOG_DEBUG, "%s : place : %p\n", __func__, p);
+        if (flag != 0 && flag != 1) {
+                return 0;
+        } 
+        
         do {
-                printf("Huffman : char = %c = 0x%02x, bits = %d, newcode = 0x%02x, priority = %d\n",
-                        p->data, p->data, p->bits, p->newcode, p->priority);
-                if (flag)
+                switch (flag) {
+                case 0:
+                        printf("Huffman : char = %c = 0x%02x, bits = %d, newcode = 0x%02x, priority = %d\n",
+                                p->data, p->data, p->bits, p->newcode, p->priority);
+                        break;
+                case 1:
                         syslog(LOG_USER | LOG_DEBUG, "%s : char=%c=0x%02x,bits=%d,newcode=0x%02x,priority=%d,my=%p,next=%p,lnext=%p,rnext=%p",
-                        __func__, p->data, p->data, p->bits, p->newcode, p->priority, p, p->next, p->lnext, p->rnext);
+                                __func__, p->data, p->data, p->bits, p->newcode, p->priority, p, p->next, p->lnext, p->rnext);
+                        break;
+                default:
+                        break;
+                }
         } while (p = p->next);
         
         return 0;
@@ -327,7 +338,7 @@ int huffman_array(struct huffman_node **_head, char (*arr)[2], struct huffman_he
                 arr[n][1] = q->newcode;
                 header->bits[n] = q->bits; 
                 header->newcode[n] = q->newcode; 
-                syslog(LOG_SYSTEM | LOG_INFO, "%s : arr[%c][0]=%d, newcode=0x%x", __func__, q->data, arr[n][0], arr[n][1]);
+                syslog(LOG_SYSTEM | LOG_DEBUG, "%s : arr[%c][0]=%d, newcode=0x%x", __func__, q->data, arr[n][0], arr[n][1]);
         } while (q = q->next);
         
         return 0;
@@ -343,8 +354,10 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
         char bits = 0;
         char flag = 0;
         char newstr[2];
+        
+        char maxbit;
+        char minbit;
 
-        #define ONE_CHAR 8
         //arr[ch][0] // bits
         //arr[ch][1] // newcode
 
@@ -359,19 +372,45 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
         }
         // write huffman_header
         int ret, len;
+        i = 0;
+        len = sizeof(header->newcode);
+        flag = 1;
+        while (i < len) {
+                if (header->bits[i]) {
+                        if (flag) {
+                                flag = 0;
+                                maxbit = header->bits[i]; 
+                                minbit = maxbit;
+                                //newstr[0] = i & 0xff;
+                                //newstr[1] = i & 0xff;
+                        } else if (maxbit < header->bits[i]) {
+                                maxbit = header->bits[i];
+                                //newstr[1] = i & 0xff;
+                        } else if (minbit > header->bits[i]) {
+                                minbit = header->bits[i];
+                                //newstr[0] = i & 0xff;
+                        }
+                }
+                ++i;
+        }
+        header->typeflag[1] = maxbit; 
+        header->typeflag[0] = minbit; 
+        //printf("%s : minbit : %d,minch:=%c=0x%x, maxbit : %d,maxch:=%c=0x%x\n", __func__, minbit, newstr[0], newstr[0]&0xff, maxbit, newstr[1], newstr[1]&0xff);
         len = sizeof(struct huffman_header);
         ret = write(fd, (char *)header, len);
         if (ret != len) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, ret=%d,len=%d", __func__, TMP_FILE, ret, len);
                 return -1;
-        } 
+        }
         newstr[1] = 0;
+        i = 0;
+        flag = 0;
         while (i < length) {
                 ch = *(str + i++);
                 n = ch & 0x00ff;
                 bits = arr[n][0];
                 flag += bits;
-                syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression # : %c, flag = %d, bits=%d", __func__, ch, flag, bits);
+                syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression # : %c, flag = %d, bits=%d", __func__, ch, flag, bits);
                 if (flag < ONE_CHAR) {
                         newchar = newchar << bits;
                         newchar |= arr[n][1] & ((1 << bits) - 1);
@@ -387,12 +426,12 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                                 return -1;
                         }
                          
-                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression = : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+                        syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression = : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
                         newchar = 0;
                         flag = 0;
                 } else {
                         newchar = newchar << (ONE_CHAR - (flag - bits));
-                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression x :%d", __func__, ONE_CHAR - (flag - bits));
+                        syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression x :%d", __func__, ONE_CHAR - (flag - bits));
                         newchar |= (arr[n][1] >> (flag - ONE_CHAR)) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
                         // write newchar  ONE_CHAR
                         newstr[0] = newchar;
@@ -403,7 +442,7 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                         }
                         
                         flag = flag - ONE_CHAR;
-                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+                        syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
                         newchar = arr[n][1] & ((1 << flag) - 1);
                 }
         }
@@ -415,7 +454,7 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                         close(fd);
                         return -1;
                 }
-                syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+                syslog(LOG_SYSTEM | LOG_WARNING, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
         }
         
         close(fd);
@@ -424,6 +463,84 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
 
 int huffman_decompression()
 {
+        #define HUFFMAN_HEADER_SIZE 1024
+        #define BUFF_SIZE           2048 
+        // 1. get the array
+        char buf[BUFF_SIZE];
+        struct huffman_header *_header = (struct huffman_header *)buf;
+        char array[256][2];
+        int len = 0;
+        char filename[256];
+        int fdtmp = open(TMP_FILE, O_RDWR);
+
+        if (fdtmp < 0) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s", __func__, TMP_FILE);
+                return -1;
+        }
+        int ret = read(fdtmp, buf, HUFFMAN_HEADER_SIZE);
+        if (ret != HUFFMAN_HEADER_SIZE) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get enough bytes : %d is wanna, but get %d", __func__, HUFFMAN_HEADER_SIZE, ret);
+                return -1;
+        }
+        int i = 0;
+        len = sizeof(_header->newcode);
+        //array[code][0] : bits
+        //array[code][1] : newcode 
+        while (i < len) {
+                array[i][0] = _header->bits[i];
+                array[i][1] = _header->newcode[i];
+                ++i;
+        }
+        // 2. read file to decompression .
+        snprintf(filename, sizeof filename, "%s%s", "test", _header->name);
+        int fdout = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0644);
+        if (fdout < 0) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s", __func__, filename);
+                return -1;
+        }
+        printf("OKAY to open %s\n", filename);
+        char ch;
+        char chout;
+        char bits;
+        char minbit = _header->typeflag[0];
+        char maxbit = _header->typeflag[1];
+        printf("%s : minbit : %d, maxbit : %d\n", __func__, minbit, maxbit);
+        
+        do {
+                ret = read(fdtmp, buf, BUFF_SIZE);
+                if ((len = ret) == -1) {
+                        break;
+                }
+                // Decompression
+                i = 0;
+                                
+                bits = minbit;
+
+                ch = (buf[i] >> (ONE_CHAR - bits)) & ((1 << bits) - 1); 
+
+                for (j = 0; j <= 0xff; j++) {
+                        if (array[j][1] == ch && array[j][0] == bits) {
+                                chout = j & 0xff;
+                                // write to file;
+                                break;
+                        }
+                }
+
+
+
+
+        } while (ret >= 1);
+
+        // 3. write to the file  
+        
+
+
+
+
+
+
+        close(fdtmp);
+        close(fdout);
         return 0;
 }
 

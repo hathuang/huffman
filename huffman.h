@@ -13,9 +13,10 @@ struct huffman_node {                   /* example         */
 
 #define HUFFMAN_SORT_BIG_FIRST          0x01
 #define HUFFMAN_SORT_SMALL_FIRST        0x02
-#define TMP_FILE         "test.tmp"
-#define SRC_FILE         "Screenshot.png"
-#define ONE_CHAR 8
+#define TMP_FILE                        "test.tmp"
+#define SRC_FILE                        "Screenshot.png"
+#define ONE_CHAR                        8
+#define HUFFMAN_HEADER_SIZE             1024
 
 struct huffman_header {
         char name[128];         /* test.mp3        */

@@ -461,20 +461,19 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
         return 0;
 }
 
-int huffman_decompression()
+#define BUFF_SIZE           2048
+int get_header(const char *filename, struct huffman_header *header, int *file_len)
 {
-        #define HUFFMAN_HEADER_SIZE 1024
-        #define BUFF_SIZE           2048 
-        // 1. get the array
-        char buf[BUFF_SIZE];
-        struct huffman_header *_header = (struct huffman_header *)buf;
-        char array[256][2];
-        int len = 0;
-        char filename[256];
-        int fdtmp = open(TMP_FILE, O_RDWR);
+        char *buf = (char *)header;
+
+        if (!filename || !buf || !file_len) {
+                syslog(LOG_USER| LOG_ERR, "%s : Ugly params", __func__);
+                return -1;
+        } 
+        int fdtmp = open(filename, O_RDWR);
 
         if (fdtmp < 0) {
-                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s", __func__, TMP_FILE);
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s", __func__, filename);
                 return -1;
         }
         int ret = read(fdtmp, buf, HUFFMAN_HEADER_SIZE);
@@ -482,19 +481,90 @@ int huffman_decompression()
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get enough bytes : %d is wanna, but get %d", __func__, HUFFMAN_HEADER_SIZE, ret);
                 return -1;
         }
-        int i = 0;
-        len = sizeof(_header->newcode);
+        close(fdtmp);
+        FILE *fp = fopen(filename, "r"); 
+        if (!fp) {
+                perror("Fail to fopen TMP_FILE");
+                return -1;
+        }
+        fseek(fp, 0, SEEK_END);
+        *file_len = ftell(fp) - HUFFMAN_HEADER_SIZE;
+        fclose(fp);
+
+        return 0;
+}
+
+int get_file_buf(const char *filename, char *_buf, int file_len)
+{
+        if (!filename || !_buf || !file_len) {
+                syslog(LOG_USER| LOG_ERR, "%s : Ugly params", __func__);
+                return -1;
+        } 
+        int fd = open(filename, O_RDWR); 
+        if (!fd) {
+                perror("Fail to open TMP_FILE");
+                return -1;
+        }
+        int len = read(fdtmp, _buf, HUFFMAN_HEADER_SIZE);
+        if (len != HUFFMAN_HEADER_SIZE) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get enough bytes : %d is wanna, but get %d", __func__, HUFFMAN_HEADER_SIZE, ret);
+                return -1;
+        }
+        len = 0;
+        int ret;
+        while (len < file_len) {
+                ret = read(fd, _buf + len, 1024);
+                if (ret <= 0) {
+                        perror("Fail to read TMP_FILE.");
+                        close(fd);
+                        return -1;
+                }
+                len += ret;
+        }
+        close(fd);
+        return 0;
+}
+
+int huffman_decompression()
+{
+        char array[256][2];
+        // 1. get the array
+        struct huffman_header *_header = (struct huffman_header *)malloc(sizeof(struct huffman_header));
+        if (_header == NULL) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to malloc for : %s, header", __func__, TMP_FILE);
+                return -1;
+        } 
+        int file_len;
+        if (get_header(TMP_FILE, _header, &file_len)) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get_header", __func__);
+                free(_header);
+                return -1;
+        }
+
+        int len = sizeof(_header->newcode);
         //array[code][0] : bits
         //array[code][1] : newcode 
+        int i = 0;
         while (i < len) {
                 array[i][0] = _header->bits[i];
                 array[i][1] = _header->newcode[i];
                 ++i;
         }
+        char *buf = (char *)malloc(file_len); 
+        if (buf == NULL) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to malloc for : %s, file buf", __func__, TMP_FILE);
+                free(_header);
+                return -1;
+        } 
+        if (get_file_buf(TMP_FILE, buf, file_len)) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get_file_buf", __func__);
+                free(_header);
+                return -1;
+        } 
         // 2. read file to decompression .
         snprintf(filename, sizeof filename, "%s%s", "test", _header->name);
-        int fdout = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0644);
-        if (fdout < 0) {
+        int fd = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0644);
+        if (fd < 0) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s", __func__, filename);
                 return -1;
         }
@@ -506,17 +576,15 @@ int huffman_decompression()
         char maxbit = _header->typeflag[1];
         printf("%s : minbit : %d, maxbit : %d\n", __func__, minbit, maxbit);
         
+        i = 0;
+        char flag = 0;
+        int j = 0;
         do {
-                ret = read(fdtmp, buf, BUFF_SIZE);
-                if ((len = ret) == -1) {
-                        break;
-                }
                 // Decompression
-                i = 0;
                                 
                 bits = minbit;
-
-                ch = (buf[i] >> (ONE_CHAR - bits)) & ((1 << bits) - 1); 
+                flag = ONE_CHAR - bits;
+                ch = (buf[i] >> flag) & ((1 << bits) - 1); 
 
                 for (j = 0; j <= 0xff; j++) {
                         if (array[j][1] == ch && array[j][0] == bits) {
@@ -527,19 +595,10 @@ int huffman_decompression()
                 }
 
 
-
-
-        } while (ret >= 1);
+        } while (i < file_len || flag);
 
         // 3. write to the file  
-        
 
-
-
-
-
-
-        close(fdtmp);
         close(fdout);
         return 0;
 }

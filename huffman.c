@@ -527,7 +527,7 @@ int get_file_buf(const char *filename, char *_buf, int file_len)
 
 int huffman_decompression()
 {
-        char array[256][2];
+        char decom_array[8][256];
         // 1. get the array
         struct huffman_header *_header = (struct huffman_header *)malloc(sizeof(struct huffman_header));
         if (_header == NULL) {
@@ -544,10 +544,30 @@ int huffman_decompression()
         int len = sizeof(_header->newcode);
         //array[code][0] : bits
         //array[code][1] : newcode 
+        char bits, newcode;
+        char minbit = _header->typeflag[0];
+        char maxbit = _header->typeflag[1];
         int i = 0;
-        while (i < len) {
-                array[i][0] = _header->bits[i];
-                array[i][1] = _header->newcode[i];
+        while (i < len) { // 0x00 - 0xff 
+                //decom_array[bits][newcode]
+                //bits : 1-8 ; newcode : 0x00-0xff
+                bits = _header->bits[i];
+                
+                if (bits >= minbit && bits <= maxbit) {
+                        if(i == 0) { // set it
+                                // set oldcode which=0x00 @ a special place,
+                                // details as follow.
+                                // decom_array[0][0]=bits of oldcode which = 0x00
+                                // decom_array[0][1]=newcode of oldcode which = 0x00
+                                // decom_array[0][2]=oldcode of oldcode which = 0x00, easily it's 0.
+                                decom_array[0][0] = bits;
+                                decom_array[0][1] = _header->newcode[i];
+                                decom_array[0][1] = 0x00;
+                        } else {
+                                newcode = _header->newcode[i];
+                                decom_array[bits][newcode] = i & 0xff;
+                        }
+                } 
                 ++i;
         }
         char *buf = (char *)malloc(file_len); 
@@ -569,35 +589,47 @@ int huffman_decompression()
                 return -1;
         }
         printf("OKAY to open %s\n", filename);
-        char ch;
-        char chout;
-        char bits;
-        char minbit = _header->typeflag[0];
-        char maxbit = _header->typeflag[1];
+        char oldcode;
         printf("%s : minbit : %d, maxbit : %d\n", __func__, minbit, maxbit);
         
         i = 0;
         char flag = 0;
-        int j = 0;
+        int loop_time;
         do {
                 // Decompression
-                                
-                bits = minbit;
-                flag = ONE_CHAR - bits;
-                ch = (buf[i] >> flag) & ((1 << bits) - 1); 
-
-                for (j = 0; j <= 0xff; j++) {
-                        if (array[j][1] == ch && array[j][0] == bits) {
-                                chout = j & 0xff;
-                                // write to file;
+                // TODO  there's a more easy method to do it 
+                loop_time = 1;
+                for (bits = minbit; bits <= maxbit; bits++) {
+                        if (flag == 0) {
+                                if (loop_time) {
+                                        loop_time = 0;
+                                        ++i;
+                                }
+                                flag = ONE_CHAR - bits;
+                                newcode = (buf[i] >> flag) & ((1 << bits) - 1); 
+                        } else {
+                                if (flag < bits) {
+                                } else {
+                                        flag = flag - bits;
+                                        newcode = (buf[i] >> flag) & ((1 << bits) - 1); 
+                                }
+                        }
+                        if (decom_array[bits][newcode] == 0) {
+                                if (decom_array[0][0] == bits && decom_array[0][1] == newcode) {
+                                        // write to file
+                                        oldcode = 0x00;
+                                        break;
+                                } else {
+                                        continue;
+                                }
+                        } else {
+                                // write to file 
+                                oldcode = decom_array[bits][newcode]; 
                                 break;
                         }
                 }
-
-
+                i += (flag < minbit);
         } while (i < file_len || flag);
-
-        // 3. write to the file  
 
         close(fdout);
         return 0;
@@ -688,3 +720,4 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
         print_debug("All goes well...\n");
         return 0;
 }
+

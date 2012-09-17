@@ -30,7 +30,6 @@ struct huffman_header {
         char password[32];       /* 123 */
         char mtime[32];
         
-        /*char data[256];*/
         char bits[256];
         char newcode[256];
         char fillbits[256];
@@ -56,7 +55,6 @@ struct tar_header {
         char padding[12];
 };
 
-extern int add(int a, int b);
 extern int huffman_encode(char *encode_s, unsigned int length, struct huffman_header *header);
 
 #endif // huffman.h

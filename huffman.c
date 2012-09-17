@@ -18,11 +18,6 @@ http://dungenessbin.diandian.com/post/2012-05-23/21949784
 //#define syslog(x,y,z) do{}while(0)
 #endif
 
-int add(int a, int b)
-{
-        return a + b;
-}
-
 int init_huffman_line(struct huffman_node **head, char *str, unsigned int length)
 {
         unsigned int i;
@@ -339,6 +334,7 @@ int huffman_array(struct huffman_node **_head, char (*arr)[2], struct huffman_he
                 header->bits[n] = q->bits; 
                 header->newcode[n] = q->newcode; 
                 syslog(LOG_SYSTEM | LOG_DEBUG, "%s : arr[%c][0]=%d, newcode=0x%x", __func__, q->data, arr[n][0], arr[n][1]);
+                syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode:%c=0x%x, bits:%d, newcode=0x%x", __func__, q->data, q->data & 0xff, arr[n][0], arr[n][1]&0xff);
         } while (q = q->next);
         
         return 0;
@@ -525,7 +521,7 @@ int get_file_buf(const char *filename, char *_buf, int file_len)
 
 int huffman_decompression()
 {
-        char decom_array[8][256];
+        char decom_array[9][256];
         char filename[256];
         char rbuf[1024];
         char bits, newcode;
@@ -541,10 +537,6 @@ int huffman_decompression()
         // 1. get the array
         //struct huffman_header *_header = (struct huffman_header *)malloc(sizeof(struct huffman_header));
         struct huffman_header *_header = (struct huffman_header *)rbuf;
-        //if (_header == NULL) {
-        //syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to malloc for : %s, header", __func__, TMP_FILE);
-        //return -1;
-        //} 
         if (get_header(TMP_FILE, _header, &file_len)) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get_header", __func__);
                 //free(_header);
@@ -584,13 +576,13 @@ int huffman_decompression()
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to malloc for : %s, file buf", __func__, TMP_FILE);
                 //free(_header);
                 return -1;
-        } 
+        }
         if (get_file_buf(TMP_FILE, buf, file_len)) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get_file_buf", __func__);
                 //free(_header);
                 free(buf);
                 return -1;
-        } 
+        }
         // 2. read file to decompression .
         memset(filename, 0, sizeof filename);
         snprintf(filename, sizeof filename, "%s%s", "test", _header->name);
@@ -603,15 +595,21 @@ int huffman_decompression()
         }
         printf("OKAY to open %s\n", filename);
         printf("%s : minbit : %d, maxbit : %d\n", __func__, minbit, maxbit);
-        
+       
+        i = 0;
+        while (i < file_len && i < 10) {
+                syslog(LOG_SYSTEM | LOG_INFO, "%s : file : %s, newcode=0x%x", __func__, filename, buf[i++]);
+        }
+
         bits = 0;
         i = 0;
         flag = 0;
         preflag = ONE_CHAR;
+        int k = 0;
         do {
                 // Decompression
                 // TODO  there's a more easy method to do it 
-                if (i < 0xff) {
+                if (i < file_len) {
                         tmp = (buf[i] << (ONE_CHAR - preflag)) | ((buf[1+i] >> preflag) & ((1 << (ONE_CHAR - preflag)) - 1)); 
                 } else {
                         tmp = buf[i] << (ONE_CHAR - preflag); 
@@ -640,16 +638,18 @@ int huffman_decompression()
                 if (preflag <= bits) {
                        preflag = ONE_CHAR - (bits - preflag);
                        ++i;
-                       if (i > 0xff && preflag == ONE_CHAR) {
+                       if (i > file_len && preflag == ONE_CHAR) {
                                printf("Decompression All goes well...\n");
                                break;
                        } 
                 } else {
                         preflag = preflag - bits;
                 }
+                k++;
         } while (i < file_len || preflag);
-
         close(fd);
+        printf("how many time in the loop : %d , file length : %d\n", k, file_len);
+
         return 0;
 }
 
@@ -660,7 +660,6 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
         char array[256][2];
         
         head = (struct huffman_node *)malloc(sizeof(struct huffman_node));
-        
         char *src = _str;
 
         print_debug("enter huffman\n");
@@ -738,4 +737,3 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
         print_debug("All goes well...\n");
         return 0;
 }
-

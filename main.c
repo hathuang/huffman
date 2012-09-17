@@ -21,7 +21,6 @@ int main(int argc, char *argv[])
         char buf[64] = "\"beepboopbeer!\"";
         init_syslog();        
         printf("hello world !\n");
-        printf("2+3=%d\n", add(2, 3));
         printf("\n\n");
         
 
@@ -36,7 +35,8 @@ int main(int argc, char *argv[])
                 return 0;
         }
         memset(header, 0, sizeof(struct huffman_header));
-        strncpy(header->name, SRC_FILE, strlen(SRC_FILE));
+        //strncpy(header->name, SRC_FILE, strlen(SRC_FILE));
+        strncpy(header->name, "hello", 5);
         strncpy(header->version, "1.0", strlen("1.0"));
                 
         // get buf of the SRC_FILE 
@@ -51,11 +51,11 @@ int main(int argc, char *argv[])
         fseek(fp, 0, SEEK_END);
         long file_len = ftell(fp);
         fclose(fp);
-        header->size[0] = (file_len >> 0) & 0xff;
-        header->size[1] = (file_len >> 8) & 0xff;
-        header->size[2] = (file_len >> 16) & 0xff;
-        header->size[3] = (file_len >> 24) & 0xff;
-        
+        //header->size[0] = (file_len >> 0) & 0xff;
+        //header->size[1] = (file_len >> 8) & 0xff;
+        //header->size[2] = (file_len >> 16) & 0xff;
+        //header->size[3] = (file_len >> 24) & 0xff;
+        //file_len = 15; 
         printf("file length = %ld\n", file_len);
         _buf = (char *)malloc(file_len * (sizeof(char)));
         if (_buf == NULL) {
@@ -77,9 +77,15 @@ int main(int argc, char *argv[])
                 }
                 len += ret;
         }
+        ret = 0;
+        while (ret < 10) {
+                syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode=0x%x=%c", __func__, _buf[ret] &0xff, _buf[ret]);
+                ret++;
+        }
+
         close(fd); 
         //if (huffman_encode(buf, strlen(buf), header)) {
-        if (huffman_encode(_buf, file_len, header)) {
+        if (huffman_encode(buf, file_len, header)) {
                 printf("error to huffman\n");
         } 
         free(header);

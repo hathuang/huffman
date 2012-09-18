@@ -19,6 +19,7 @@
 int main(int argc, char *argv[])
 {
         char buf[64] = "beep boop beer!";
+        char header_buf[1024];
         //char buf[1024] = "\"adfazxcvjadadfadadzasdfadczsdfwdadfaeadfadzcaefa\"";
         init_syslog();        
         printf("hello world !\n");
@@ -28,14 +29,10 @@ int main(int argc, char *argv[])
         printf("start to huffman\n");
         printf("sizeof (struct huffman_header) = %d\n", sizeof (struct huffman_header));
         
-        struct huffman_header *header = (struct huffman_header *)malloc(sizeof(struct huffman_header));
+        struct huffman_header *header = (struct huffman_header *)header_buf;
 
         // init the huffman_header
-        if (!header) {
-                perror("Fail to malloc for huffman_header");
-                return 0;
-        }
-        memset(header, 0, sizeof(struct huffman_header));
+        memset(header_buf, 0, sizeof(header_buf));
         //strncpy(header->name, SRC_FILE, strlen(SRC_FILE));
         strncpy(header->name, "hello", 5);
         strncpy(header->version, "1.0", strlen("1.0"));
@@ -79,8 +76,8 @@ int main(int argc, char *argv[])
                 len += ret;
         }
         //if (_buf[file_len-1] == '\n') {
-        //_buf[--file_len] = 0;
-        //} 
+                //_buf[--file_len] = 0;
+                //} 
         ret = 0;
         while (ret < 10) {
                 syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode=0x%x=%c", __func__, _buf[ret] &0xff, _buf[ret]);
@@ -92,7 +89,6 @@ int main(int argc, char *argv[])
         if (huffman_encode(_buf, file_len, header)) {
                 printf("error to huffman\n");
         }
-        free(header);
         free(_buf);
         printf("Good !\n");
         

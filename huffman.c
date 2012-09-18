@@ -4,6 +4,7 @@ http://dungenessbin.diandian.com/post/2012-05-23/21949784
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "huffman.h"
 #include "syslog.h"
 #include <sys/types.h>
@@ -388,6 +389,7 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                 }
                 ++i;
         }
+        header->typeflag[2] = ONE_CHAR; // the last char is full used default 
         header->typeflag[1] = maxbit; 
         header->typeflag[0] = minbit; 
         //printf("%s : minbit : %d,minch:=%c=0x%x, maxbit : %d,maxch:=%c=0x%x\n", __func__, minbit, newstr[0], newstr[0]&0xff, maxbit, newstr[1], newstr[1]&0xff);
@@ -442,16 +444,27 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
         }
         if (flag) { // FIXME
                 // write;
-                newstr[0] = newchar;
+                newstr[0] = newchar << (ONE_CHAR - flag);
                 if (1 != (ret = write(fd, newstr, 1))) {
                         syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, ret=%d,flag=%d", __func__, TMP_FILE, ret, flag);
                         close(fd);
                         return -1;
                 }
-                syslog(LOG_SYSTEM | LOG_WARNING, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+                close(fd);
+                header->typeflag[2] = flag & 0x07;
+                syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+                if ((fd = open(TMP_FILE, O_RDWR)) < 0) {
+                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s. errno=%d", __func__, TMP_FILE, errno);
+                        return -1;
+                }
+                len = sizeof(struct huffman_header);
+                ret = write(fd, (char *)header, len);
+                if (ret != len) {
+                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, ret=%d,len=%d", __func__, TMP_FILE, ret, len);
+                        return -1;
+                }
+                close(fd);
         }
-        
-        close(fd);
         return 0;
 }
 
@@ -522,7 +535,7 @@ int huffman_decompression()
         char decom_array[9][256];
         char filename[256];
         char rbuf[1024];
-        char bits, newcode;
+        char bits, newcode, last_ch_bits;
         char *buf = NULL;
         int n, m, fd, i;
         int file_len;
@@ -544,6 +557,8 @@ int huffman_decompression()
         //array[code][1] : newcode 
         minbit = _header->typeflag[0];
         maxbit = _header->typeflag[1];
+        last_ch_bits = _header->typeflag[2];
+        printf("last_ch_bits = %d\n", last_ch_bits);
         // init
         for (m = 0; m < 9; m++) {
                 for (n = 0; n < 256; n++) {
@@ -601,16 +616,20 @@ int huffman_decompression()
         i = 0;
         flag = 0;
         preflag = ONE_CHAR;
-        int k = 0;
         do {
                 // Decompression
                 // TODO  there's a more easy method to do it 
-                if (i < file_len) {
+                if (i < (file_len - 1)) {// fixme
                         tmp = (buf[i] << (ONE_CHAR - preflag)) | ((buf[1+i] >> preflag) & ((1 << (ONE_CHAR - preflag)) - 1)); 
+                        //if (i == (file_len - 2) && preflag > 0) {
+                        //last_ch_bits -= preflag;
+                        //}
+                } else if (i == (file_len - 1) && last_ch_bits > 0) {
+                        tmp = buf[i] << (ONE_CHAR - preflag);
+                        last_ch_bits -= ONE_CHAR - preflag;
                 } else {
                         break;
-
-                        tmp = buf[i] << (ONE_CHAR - preflag); 
+                        //tmp = buf[i] << (ONE_CHAR - preflag); 
                 }
                 for (bits = minbit; bits <= maxbit; bits++) {
                         flag = ONE_CHAR - bits;
@@ -621,6 +640,7 @@ int huffman_decompression()
                                         oldcode = 0x00;
                                         str[0] = oldcode;
                                         write(fd, str, 1);
+                                        if (i == (file_len - 1)) last_ch_bits -= bits;
                                         break;
                                 } else {
                                         continue;
@@ -630,23 +650,25 @@ int huffman_decompression()
                                 oldcode = decom_array[bits][newcode]; 
                                 str[0] = oldcode;
                                 write(fd, str, 1);
+                                //if (oldcode == 'b') {
+                                        printf("oldcode=%c=%d , i = %d, last_ch_bits = %d, bits = %d\n", oldcode, oldcode, i, last_ch_bits, bits);
+                                        //}
+                                if (i == (file_len - 1)) last_ch_bits -= bits;
                                 break;
                         }
                 }
                 if (preflag <= bits) {
-                       preflag = ONE_CHAR - (bits - preflag);
-                       ++i;
-                       if (i > file_len && preflag == ONE_CHAR) {
-                               printf("Decompression All goes well...\n");
-                               break;
-                       } 
+                        preflag = ONE_CHAR - (bits - preflag);
+                        ++i;
+                        if (i >= file_len && preflag == ONE_CHAR) {
+                                printf("Decompression All goes well...\n");
+                                break;
+                        }
                 } else {
-                        preflag = preflag - bits;
+                        preflag -= bits;
                 }
-                k++;
-        } while (i < file_len || preflag);
+        } while ((i < file_len || preflag > 0) && last_ch_bits > 0);
         close(fd);
-        printf("how many time in the loop : %d , file length : %d\n", k, file_len);
 
         return 0;
 }

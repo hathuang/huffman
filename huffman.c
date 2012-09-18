@@ -351,8 +351,7 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
         char flag = 0;
         char newstr[2];
         
-        char maxbit;
-        char minbit;
+        char maxbit, minbit;
 
         //arr[ch][0] // bits
         //arr[ch][1] // newcode
@@ -406,11 +405,11 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                 n = ch & 0x00ff;
                 bits = arr[n][0];
                 flag += bits;
-                syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression # : %c, flag = %d, bits=%d", __func__, ch, flag, bits);
+                //syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression # : %c, flag = %d, bits=%d", __func__, ch, flag, bits);
                 if (flag < ONE_CHAR) {
                         newchar = newchar << bits;
                         newchar |= arr[n][1] & ((1 << bits) - 1);
-                        continue;         
+                        continue;
                 } else if (flag == ONE_CHAR) {
                         newchar = newchar << bits;
                         newchar |= arr[n][1] & ((1 << bits) - 1);
@@ -421,8 +420,7 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                                 close(fd);
                                 return -1;
                         }
-                         
-                        syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression = : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
+                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression = : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
                         newchar = 0;
                         flag = 0;
                 } else {
@@ -436,7 +434,7 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                                 close(fd);
                                 return -1;
                         }
-                        
+                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
                         flag = flag - ONE_CHAR;
                         syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
                         newchar = arr[n][1] & ((1 << flag) - 1);
@@ -526,8 +524,7 @@ int huffman_decompression()
         char rbuf[1024];
         char bits, newcode;
         char *buf = NULL;
-        int n, m, fd;
-        int i = 0;
+        int n, m, fd, i;
         int file_len;
         char minbit, maxbit;
         char flag, preflag;
@@ -547,7 +544,12 @@ int huffman_decompression()
         //array[code][1] : newcode 
         minbit = _header->typeflag[0];
         maxbit = _header->typeflag[1];
-        //len = 256;
+        // init
+        for (m = 0; m < 9; m++) {
+                for (n = 0; n < 256; n++) {
+                        decom_array[m][n] = 0;
+                }
+        }
         i = 0;
         while (i < 256) { // 0x00 - 0xff 
                 //decom_array[bits][newcode]
@@ -571,7 +573,8 @@ int huffman_decompression()
                 }
                 ++i;
         }
-        buf = (char *)malloc(file_len); 
+        syslog(LOG_USER | LOG_INFO, "%s : huffman file length : %d.", __func__, file_len);
+        buf = (char *)malloc(file_len);
         if (buf == NULL) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to malloc for : %s, file buf", __func__, TMP_FILE);
                 //free(_header);
@@ -584,9 +587,7 @@ int huffman_decompression()
                 return -1;
         }
         // 2. read file to decompression .
-        memset(filename, 0, sizeof filename);
-        snprintf(filename, sizeof filename, "%s%s", "test", _header->name);
-        //free(_header);
+        snprintf(filename, sizeof filename, "%s%s.png", "test", _header->name);
         fd = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0644);
         if (fd < 0) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s", __func__, filename);
@@ -596,11 +597,6 @@ int huffman_decompression()
         printf("OKAY to open %s\n", filename);
         printf("%s : minbit : %d, maxbit : %d\n", __func__, minbit, maxbit);
        
-        i = 0;
-        while (i < file_len && i < 10) {
-                syslog(LOG_SYSTEM | LOG_INFO, "%s : file : %s, newcode=0x%x", __func__, filename, buf[i++]);
-        }
-
         bits = 0;
         i = 0;
         flag = 0;
@@ -612,6 +608,8 @@ int huffman_decompression()
                 if (i < file_len) {
                         tmp = (buf[i] << (ONE_CHAR - preflag)) | ((buf[1+i] >> preflag) & ((1 << (ONE_CHAR - preflag)) - 1)); 
                 } else {
+                        break;
+
                         tmp = buf[i] << (ONE_CHAR - preflag); 
                 }
                 for (bits = minbit; bits <= maxbit; bits++) {
@@ -709,13 +707,13 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
         }
         print_newcode(&node, 1); 
         
-        print_debug("start to huffman_sort, big first\n");
         //if (huffman_sort(&head, HUFFMAN_SORT_BIG_FIRST)) {
         //syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_sort big first", __func__);
         //node_distory(&node);
         //return -1;
         //}
         
+        print_debug("start to huffman_array\n");
         if (huffman_array(&node, array, header)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_array", __func__);
                 node_distory(&node);
@@ -724,11 +722,13 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
         // distory the node, no need any more. 
         node_distory(&node);
         // Compression 
+        print_debug("start to huffman_compression\n");
         if (huffman_compression(array, src, length, header)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_compression", __func__);
                 return -1;
         }
         // Decompression 
+        print_debug("start to huffman_decompression\n");
         if (huffman_decompression()) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_decompression", __func__);
                 return -1;

@@ -18,7 +18,8 @@
 
 int main(int argc, char *argv[])
 {
-        char buf[64] = "\"beepboopbeer!\"";
+        char buf[64] = "beep boop beer!";
+        //char buf[1024] = "\"adfazxcvjadadfadadzasdfadczsdfwdadfaeadfadzcaefa\"";
         init_syslog();        
         printf("hello world !\n");
         printf("\n\n");
@@ -77,17 +78,20 @@ int main(int argc, char *argv[])
                 }
                 len += ret;
         }
+        //if (_buf[file_len-1] == '\n') {
+        //_buf[--file_len] = 0;
+        //} 
         ret = 0;
         while (ret < 10) {
                 syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode=0x%x=%c", __func__, _buf[ret] &0xff, _buf[ret]);
                 ret++;
         }
 
-        close(fd); 
+        close(fd);
         //if (huffman_encode(buf, strlen(buf), header)) {
-        if (huffman_encode(buf, file_len, header)) {
+        if (huffman_encode(_buf, file_len, header)) {
                 printf("error to huffman\n");
-        } 
+        }
         free(header);
         free(_buf);
         printf("Good !\n");

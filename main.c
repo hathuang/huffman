@@ -18,7 +18,7 @@
 
 int main(int argc, char *argv[])
 {
-        char buf[64] = "beep boop beer!";
+        //char buf[64] = "beep boop beer!";
         char header_buf[1024];
         //char buf[1024] = "\"adfazxcvjadadfadadzasdfadczsdfwdadfaeadfadzcaefa\"";
         init_syslog();        

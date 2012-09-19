@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <time.h>
+#include <unistd.h>
 #include "syslog.h"
 
 #define LOG_FILE  "./log.txt"

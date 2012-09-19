@@ -10,6 +10,7 @@ http://dungenessbin.diandian.com/post/2012-05-23/21949784
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #ifdef Debug
 #define print_debug(x)     printf(x)
@@ -36,7 +37,7 @@ int init_huffman_line(struct huffman_node **head, char *str, unsigned int length
         // first node
         node->data = *(src + 0);
         node->bits = 0;
-        node->newcode = 0;
+        node->newcode = '\0';
         node->priority = 1;
         node->lnext = NULL;
         node->rnext = NULL;
@@ -64,7 +65,7 @@ int init_huffman_line(struct huffman_node **head, char *str, unsigned int length
 
                         pnode->data = ch;
                         pnode->bits = 0;
-                        pnode->newcode = 0;
+                        pnode->newcode = '\0';
                         pnode->priority = 1;
                         pnode->lnext = NULL;
                         pnode->rnext = NULL;
@@ -79,7 +80,6 @@ int huffman_sort(struct huffman_node **head, int flag)
         // only 255 elements in the line at most; // 256
         struct huffman_node *p = *head;
         struct huffman_node *q = NULL;
-        struct huffman_node *pre = NULL;
         
         if (!p) {
                 syslog(LOG_USER | LOG_ERR , "%s : Ugly params.", __func__);
@@ -211,7 +211,7 @@ int huffman_tree(struct huffman_node **root)
 {
         struct huffman_node *node = NULL;
         struct huffman_node *p = NULL;
-        int ret = -1;
+        //int ret = -1;
         
         if ((*root) == NULL) {
                 return -1;
@@ -252,7 +252,6 @@ int huffman_tree(struct huffman_node **root)
                         }
                 }
         }
-        syslog(LOG_USER | LOG_ERR , "%s : Unkown error, out of control.", __func__);
         
         return -1;
 }
@@ -308,7 +307,7 @@ int print_newcode(struct huffman_node **head, int flag)
         return 0;
 }
 
-int huffman_array(struct huffman_node **_head, char (*arr)[2], struct huffman_header *header)
+int huffman_array(struct huffman_node **_head, unsigned char (*arr)[2], struct huffman_header *header)
 {
         struct huffman_node *q = *_head;
         int n;
@@ -341,18 +340,18 @@ int huffman_array(struct huffman_node **_head, char (*arr)[2], struct huffman_he
         return 0;
 }
 
-int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct huffman_header *header)
+int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length, struct huffman_header *header)
 {
-        char ch = '\0';
-        char newchar = '\0';
+        unsigned char ch = '\0';
+        unsigned char newchar = '\0';
         char *str = src;
         int n;
-        unsigned int i = 0;
-        char bits = 0;
-        char flag = 0;
+        unsigned int i;
+        unsigned char bits = 0;
         char newstr[2];
+        int ret, len;
         
-        char maxbit, minbit;
+        unsigned char maxbit, minbit, flag;
 
         //arr[ch][0] // bits
         //arr[ch][1] // newcode
@@ -367,7 +366,6 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                 return -1;
         }
         // write huffman_header
-        int ret, len;
         i = 0;
         len = sizeof(header->newcode);
         flag = 1;
@@ -377,14 +375,10 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
                                 flag = 0;
                                 maxbit = header->bits[i]; 
                                 minbit = maxbit;
-                                //newstr[0] = i & 0xff;
-                                //newstr[1] = i & 0xff;
                         } else if (maxbit < header->bits[i]) {
                                 maxbit = header->bits[i];
-                                //newstr[1] = i & 0xff;
                         } else if (minbit > header->bits[i]) {
                                 minbit = header->bits[i];
-                                //newstr[0] = i & 0xff;
                         }
                 }
                 ++i;
@@ -392,7 +386,6 @@ int huffman_compression(char (*arr)[2], char *src, unsigned int length, struct h
         header->typeflag[2] = ONE_CHAR; // the last char is full used default 
         header->typeflag[1] = maxbit; 
         header->typeflag[0] = minbit; 
-        //printf("%s : minbit : %d,minch:=%c=0x%x, maxbit : %d,maxch:=%c=0x%x\n", __func__, minbit, newstr[0], newstr[0]&0xff, maxbit, newstr[1], newstr[1]&0xff);
         len = sizeof(struct huffman_header);
         ret = write(fd, (char *)header, len);
         if (ret != len) {
@@ -501,6 +494,8 @@ int get_header(const char *filename, struct huffman_header *header, int *file_le
 
 int get_file_buf(const char *filename, char *_buf, int file_len)
 {
+        int ret;
+
         if (!filename || !_buf || !file_len) {
                 syslog(LOG_USER| LOG_ERR, "%s : Ugly params", __func__);
                 return -1;
@@ -516,9 +511,8 @@ int get_file_buf(const char *filename, char *_buf, int file_len)
                 return -1;
         }
         len = 0;
-        int ret;
         while (len < file_len) {
-                ret = read(fd, _buf + len, 1024);
+                ret = read(fd, _buf + len, file_len - len);
                 if (ret <= 0) {
                         perror("Fail to read TMP_FILE.");
                         close(fd);
@@ -532,17 +526,16 @@ int get_file_buf(const char *filename, char *_buf, int file_len)
 
 int huffman_decompression()
 {
-        char decom_array[9][256];
+        unsigned char decom_array[9][256];
         char filename[256];
         char rbuf[1024];
-        char bits, newcode, last_ch_bits;
+        unsigned char bits, last_ch_bits, newcode;
         char *buf = NULL;
         int n, m, fd, i;
         int file_len;
-        char minbit, maxbit;
+        unsigned char tmp, minbit, maxbit;
         char flag, preflag;
         char oldcode;
-        char tmp;
         char str[2] = {0,0};
         // 1. get the array
         //struct huffman_header *_header = (struct huffman_header *)malloc(sizeof(struct huffman_header));
@@ -612,7 +605,7 @@ int huffman_decompression()
         printf("OKAY to open %s\n", filename);
         printf("%s : minbit : %d, maxbit : %d\n", __func__, minbit, maxbit);
        
-        bits = 0;
+        //bits = 0;
         i = 0;
         flag = 0;
         preflag = ONE_CHAR;
@@ -626,7 +619,8 @@ int huffman_decompression()
                         //}
                 } else if (i == (file_len - 1) && last_ch_bits > 0) {
                         tmp = buf[i] << (ONE_CHAR - preflag);
-                        last_ch_bits -= ONE_CHAR - preflag;
+                        //printf("i = %d, last_ch_bits = %d, preflag = %d\n", i, last_ch_bits, preflag);
+                        //last_ch_bits -= ONE_CHAR - preflag;
                 } else {
                         break;
                         //tmp = buf[i] << (ONE_CHAR - preflag); 
@@ -634,13 +628,12 @@ int huffman_decompression()
                 for (bits = minbit; bits <= maxbit; bits++) {
                         flag = ONE_CHAR - bits;
                         newcode = (tmp >> flag) & ((1 << bits) - 1); 
-                        if (decom_array[bits][newcode] == 0) {
+                        if (decom_array[bits][newcode] == '\0') {
                                 if (decom_array[0][0] == bits && decom_array[0][1] == newcode) {
                                         // write to file
                                         oldcode = 0x00;
                                         str[0] = oldcode;
                                         write(fd, str, 1);
-                                        if (i == (file_len - 1)) last_ch_bits -= bits;
                                         break;
                                 } else {
                                         continue;
@@ -651,15 +644,20 @@ int huffman_decompression()
                                 str[0] = oldcode;
                                 write(fd, str, 1);
                                 //if (oldcode == 'b') {
-                                        printf("oldcode=%c=%d , i = %d, last_ch_bits = %d, bits = %d\n", oldcode, oldcode, i, last_ch_bits, bits);
+                                //printf("oldcode=%c=%d , i = %d, last_ch_bits = %d, bits = %d\n", oldcode, oldcode, i, last_ch_bits, bits);
                                         //}
-                                if (i == (file_len - 1)) last_ch_bits -= bits;
                                 break;
                         }
                 }
                 if (preflag <= bits) {
-                        preflag = ONE_CHAR - (bits - preflag);
                         ++i;
+                        if (i == (file_len - 1)) {
+                                preflag = last_ch_bits - (bits - preflag);
+                                last_ch_bits = preflag;
+                                continue;
+                        } else {
+                                preflag = ONE_CHAR - (bits - preflag);
+                        }
                         if (i >= file_len && preflag == ONE_CHAR) {
                                 printf("Decompression All goes well...\n");
                                 break;
@@ -677,7 +675,7 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
 {
         struct huffman_node *head = NULL;
         struct huffman_node *node = NULL;
-        char array[256][2];
+        unsigned char array[256][2];
         
         head = (struct huffman_node *)malloc(sizeof(struct huffman_node));
         char *src = _str;

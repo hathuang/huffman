@@ -30,8 +30,8 @@ struct huffman_header {
         char password[32];       /* 123 */
         char mtime[32];
         
-        char bits[256];
-        char newcode[256];
+        unsigned char bits[256];
+        unsigned char newcode[256];
         char fillbits[256];
 };
 

@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include "huffman.h"
 #include "syslog.h"
 
@@ -20,6 +21,7 @@ int main(int argc, char *argv[])
 {
         //char buf[64] = "beep boop beer!";
         char header_buf[1024];
+        int len, ret;
         //char buf[1024] = "\"adfazxcvjadadfadadzasdfadczsdfwdadfaeadfadzcaefa\"";
         init_syslog();        
         printf("hello world !\n");
@@ -65,7 +67,6 @@ int main(int argc, char *argv[])
                 perror("Fail to open SRC_FILE.");
                 return 0;
         } 
-        int len, ret;
         len = 0;
         while (len < file_len) {
                 ret = read(fd, _buf + len, 1024);

@@ -253,10 +253,7 @@ int node_distory(struct huffman_node **head)
         struct huffman_node *p = *head;
         struct huffman_node *q = NULL;
 
-        if (!p) {
-                syslog(LOG_USER | LOG_ERR , "%s : Ugly params.", __func__);
-                return -1;
-        }
+        if (!p) return -1;
         q = p;
         while (q = p->next) {
                 //syslog(LOG_USER | LOG_INFO , "%s : free : %p.", __func__, p);
@@ -484,8 +481,9 @@ int get_header(const char *filename, struct huffman_header *header, int *file_le
 int get_file_buf(const char *filename, char *_buf, int file_len)
 {
         int ret;
+        char buf[1024];
 
-        if (!filename || !_buf || !file_len) {
+        if (!filename || !_buf || file_len <= 0) {
                 syslog(LOG_USER| LOG_ERR, "%s : Ugly params", __func__);
                 return -1;
         } 
@@ -494,7 +492,7 @@ int get_file_buf(const char *filename, char *_buf, int file_len)
                 perror("Fail to open TMP_FILE");
                 return -1;
         }
-        int len = read(fd, _buf, HUFFMAN_HEADER_SIZE);
+        int len = read(fd, buf, HUFFMAN_HEADER_SIZE);
         if (len != HUFFMAN_HEADER_SIZE) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get enough bytes : %d is wanna, but get %d", __func__, HUFFMAN_HEADER_SIZE, len);
                 return -1;
@@ -509,7 +507,9 @@ int get_file_buf(const char *filename, char *_buf, int file_len)
                 }
                 len += ret;
         }
+        //syslog(LOG_SYSTEM | LOG_ERR, "%s : ### get enough bytes : %d is wanna, but get %d", __func__, file_len , len);
         close(fd);
+        printf("$$$$$$$$$$$$$$$$$$$ ### get enough bytes : %d is wanna, but get %d\n", file_len , len);
         return 0;
 }
 
@@ -526,9 +526,11 @@ int huffman_decompression()
         char flag, preflag, last_ch_bits;
         char oldcode;
         char str[2] = {0,0};
-        // 1. get the array
+        char *buf = NULL;
         //struct huffman_header *_header = (struct huffman_header *)malloc(sizeof(struct huffman_header));
         struct huffman_header *_header = (struct huffman_header *)rbuf;
+
+        // 1. get the array
         if (get_header(TMP_FILE, _header, &file_len)) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to get_header", __func__);
                 return -1;
@@ -570,7 +572,7 @@ int huffman_decompression()
                 ++i;
         }
         syslog(LOG_USER | LOG_INFO, "%s : huffman file length : %d.", __func__, file_len);
-        char *buf = (char *)malloc(sizeof(char) * (file_len + 1));
+        buf = (char *)malloc(sizeof(char) * (file_len + 4));
         if (buf == NULL) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to malloc for : %s, file buf", __func__, TMP_FILE);
                 return -1;
@@ -604,7 +606,7 @@ int huffman_decompression()
                         tmp = (buf[i] << (ONE_CHAR - preflag)) | ((buf[1+i] >> preflag) & ((1 << (ONE_CHAR - preflag)) - 1)); 
                 } else if (i == (file_len - 1) && preflag > 0) {
                         tmp = buf[i] << (last_ch_bits - preflag);
-                        printf("buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, *(buf+i), last_ch_bits, preflag);
+                        printf("buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, (*(buf+i)) & 0xff, last_ch_bits, preflag);
                 } else {
                         break;
                 }
@@ -636,7 +638,7 @@ int huffman_decompression()
                         ++i;
                         if (i == (file_len - 1)) {
                                 preflag = last_ch_bits - (bits - preflag);
-                                printf("xx buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, *(buf+i), last_ch_bits, preflag);
+                                printf("xx buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, (*(buf+i))&0xff, last_ch_bits, preflag);
                                 continue;
                         } else {
                                 preflag = ONE_CHAR - (bits - preflag);
@@ -667,7 +669,7 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
         char *src = _str;
 
         print_debug("enter huffman\n");
-        syslog(LOG_SYSTEM | LOG_INFO, "%s : hello huffman", __func__);
+        //syslog(LOG_SYSTEM | LOG_INFO, "%s : hello huffman", __func__);
         if (!(node = head)) {
                 syslog(LOG_SYSTEM | LOG_ERR , "%s : Fail to malloc for head", __func__);
                 return -1;

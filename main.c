@@ -79,11 +79,11 @@ int main(int argc, char *argv[])
         //if (_buf[file_len-1] == '\n') {
                 //_buf[--file_len] = 0;
                 //} 
-        ret = 0;
-        while (ret < 10) {
-                syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode=0x%x=%c", __func__, _buf[ret] &0xff, _buf[ret]);
-                ret++;
-        }
+                //ret = 0;
+                //while (ret < 10) {
+                //syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode=0x%x=%c", __func__, _buf[ret] &0xff, _buf[ret]);
+                //ret++;
+                //}
 
         close(fd);
         //if (huffman_encode(buf, strlen(buf), header)) {

@@ -338,11 +338,10 @@ int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length,
         unsigned char ch = '\0';
         unsigned char newchar = '\0';
         char *str = src;
-        int n;
         unsigned int i;
         unsigned char bits = 0;
         char newstr[2];
-        int ret, len;
+        int ret, len, n;
         
         unsigned char maxbit, minbit, flag;
 
@@ -393,7 +392,6 @@ int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length,
                 n = ch & 0x00ff;
                 bits = arr[n][0];
                 flag += bits;
-                //syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression # : %c, flag = %d, bits=%d", __func__, ch, flag, bits);
                 if (flag < ONE_CHAR) {
                         newchar = newchar << bits;
                         newchar |= arr[n][1] & ((1 << bits) - 1);
@@ -413,7 +411,6 @@ int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length,
                         flag = 0;
                 } else {
                         newchar = newchar << (ONE_CHAR - (flag - bits));
-                        //syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression x :%d", __func__, ONE_CHAR - (flag - bits));
                         newchar |= (arr[n][1] >> (flag - ONE_CHAR)) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
                         // write newchar  ONE_CHAR
                         newstr[0] = newchar;
@@ -424,7 +421,6 @@ int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length,
                         }
                         syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression > : 0x%02x", __func__, newchar & 0xff);
                         flag = flag - ONE_CHAR;
-                        //syslog(LOG_SYSTEM | LOG_DEBUG, "%s : Compression > : 0x%x, flag = %d", __func__, newchar & 0xff, flag);
                         newchar = arr[n][1] & ((1 << flag) - 1);
                 }
         }
@@ -522,12 +518,12 @@ int huffman_decompression()
         unsigned char decom_array[9][256];
         char filename[256];
         char rbuf[1024];
-        unsigned char bits, last_ch_bits, newcode;
+        unsigned char bits, newcode;
         //char *buf = NULL;
         int n, m, fd, i;
         int file_len;
         unsigned char tmp, minbit, maxbit;
-        char flag, preflag;
+        char flag, preflag, last_ch_bits;
         char oldcode;
         char str[2] = {0,0};
         // 1. get the array
@@ -606,11 +602,13 @@ int huffman_decompression()
                 // TODO  there's a more easy method to do it 
                 if (i < (file_len - 1)) {// fixme
                         tmp = (buf[i] << (ONE_CHAR - preflag)) | ((buf[1+i] >> preflag) & ((1 << (ONE_CHAR - preflag)) - 1)); 
-                } else if (i == (file_len - 1) && last_ch_bits > 0) {
-                        tmp = buf[i] << (ONE_CHAR - preflag);
+                } else if (i == (file_len - 1) && preflag > 0) {
+                        tmp = buf[i] << (last_ch_bits - preflag);
+                        printf("buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, *(buf+i), last_ch_bits, preflag);
                 } else {
                         break;
                 }
+                printf("%s : Decompression : buf[%03d]=%c=0x%02x.\n", __func__, i, buf[i], buf[i]&0xff);
                 for (bits = minbit; bits <= maxbit; bits++) {
                         flag = ONE_CHAR - bits;
                         newcode = (tmp >> flag) & ((1 << bits) - 1); 
@@ -629,7 +627,8 @@ int huffman_decompression()
                                 oldcode = decom_array[bits][newcode]; 
                                 str[0] = oldcode;
                                 write(fd, str, 1);
-                                //syslog(LOG_USER | LOG_INFO, "%s : Decompression : %c.0x%x", __func__, oldcode, oldcode);
+                                //syslog(LOG_USER | LOG_INFO, "%s : Decompression : %c . 0x%02x", __func__, oldcode, oldcode);
+                                //printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
                                 break;
                         }
                 }
@@ -637,7 +636,7 @@ int huffman_decompression()
                         ++i;
                         if (i == (file_len - 1)) {
                                 preflag = last_ch_bits - (bits - preflag);
-                                last_ch_bits = preflag;
+                                printf("xx buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, *(buf+i), last_ch_bits, preflag);
                                 continue;
                         } else {
                                 preflag = ONE_CHAR - (bits - preflag);
@@ -649,7 +648,7 @@ int huffman_decompression()
                 } else {
                         preflag -= bits;
                 }
-        } while ((i < file_len || preflag > 0) && last_ch_bits > 0);
+        } while (i < file_len || preflag > 0);
         close(fd);
         printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx buf : %p\n", buf);
         free(buf);

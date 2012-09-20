@@ -6,7 +6,7 @@
 # Normal rules
 #
 
-gitignore
+.gitignore
 log.txt
 log.bak.txt
 tags
@@ -21,3 +21,4 @@ tags
 *.bak
 huffman
 *.swp
+core

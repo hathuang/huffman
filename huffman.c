@@ -398,7 +398,7 @@ int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length,
         header->typeflag[2] = ONE_CHAR; // the last char is full used default 
         header->typeflag[1] = maxbit;
         header->typeflag[0] = minbit;
-        syslog(LOG_USER | LOG_INFO, "%s : minbit = %d maxbit = %d.", __func__, header->typeflag[0], header->typeflag[1]);
+        //syslog(LOG_USER | LOG_INFO, "%s : minbit = %d maxbit = %d.", __func__, header->typeflag[0], header->typeflag[1]);
         len = sizeof(struct huffman_header);
         ret = write(fd, (char *)header, len);
         if (ret != len) {
@@ -427,7 +427,7 @@ int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length,
                                 close(fd);
                                 return -1;
                         }
-                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression = : 0x%02x", __func__, newchar & 0xff);
+                        //syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression = : 0x%02x", __func__, newchar & 0xff);
                         newchar = 0;
                         flag = 0;
                 } else {
@@ -440,7 +440,7 @@ int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length,
                                 close(fd);
                                 return -1;
                         }
-                        syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression > : 0x%02x", __func__, newchar & 0xff);
+                        //syslog(LOG_SYSTEM | LOG_INFO, "%s : Compression > : 0x%02x", __func__, newchar & 0xff);
                         flag = flag - ONE_CHAR;
                         newchar = arr[n][1] & ((1 << flag) - 1);
                 }
@@ -453,22 +453,21 @@ int huffman_compression(unsigned char (*arr)[2], char *src, unsigned int length,
                         close(fd);
                         return -1;
                 }
-                close(fd);
                 header->typeflag[2] = flag & 0x07;
-                syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression ~ : 0x%02x, flag = %d", __func__, newstr[0], flag);
-                if ((fd = open(TMP_FILE, O_RDWR)) < 0) {
-                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s. errno=%d", __func__, TMP_FILE, errno);
+                //syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression ~ : 0x%02x, flag = %d", __func__, newstr[0], flag);
+                if (lseek(fd, 0, SEEK_SET) < 0) {
+                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to lseek . errno=%d", __func__, errno);
+                        close(fd);
                         return -1;
                 }
-                len = sizeof(struct huffman_header);
-                ret = write(fd, (char *)header, len);
-                if (ret != len) {
-                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, ret=%d,len=%d", __func__, TMP_FILE, ret, len);
+                if (write(fd, (char *)header, HUFFMAN_HEADER_SIZE) != HUFFMAN_HEADER_SIZE) {
+                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, len=%d", __func__, TMP_FILE, HUFFMAN_HEADER_SIZE);
+                        close(fd);
                         return -1;
                 }
-                syslog(LOG_USER | LOG_INFO, "%s : minbit = %d maxbit = %d.", __func__, header->typeflag[0], header->typeflag[1]);
-                close(fd);
+                //syslog(LOG_USER | LOG_INFO, "%s : minbit = %d maxbit = %d.", __func__, header->typeflag[0], header->typeflag[1]);
         }
+        close(fd);
         return 0;
 }
 

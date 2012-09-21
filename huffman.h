@@ -3,7 +3,7 @@
 
 struct huffman_node {                   /* example         */
         char data;                      /* char o          */
-        char bits;                      /* bits of newcode 1-25 */
+        char bits;                      /* bits of newcode 1-32 */
         char newcode;                   /*                 */
         unsigned int priority;          /* 5               */
         struct huffman_node *lnext;     /* ***             */     
@@ -34,6 +34,14 @@ struct huffman_header {
         unsigned char newcode[256];
         char fillbits[256];
 };
+
+/*struct huffman_header2 {*/
+/*char tags[8];*/
+/*char magic[8];*/
+/*unsigned int tree_size;*/
+        /* insert tree body */
+        /* file body follows tree body */
+/*}*/
 
 struct tar_header {
         char name[100];

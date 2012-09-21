@@ -3,7 +3,7 @@
 
 struct huffman_node {                   /* example         */
         char data;                      /* char o          */
-        char bits;                      /* bits of newcode 0-8 */
+        char bits;                      /* bits of newcode 1-25 */
         char newcode;                   /*                 */
         unsigned int priority;          /* 5               */
         struct huffman_node *lnext;     /* ***             */     

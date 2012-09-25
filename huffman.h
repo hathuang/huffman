@@ -4,7 +4,7 @@
 struct huffman_node {                   /* example         */
         char data;                      /* char o          */
         char bits;                      /* bits of newcode 1-32 */
-        char newcode;                   /*                 */
+        unsigned short newcode;         /*                 */
         unsigned int priority;          /* 5               */
         struct huffman_node *lnext;     /* ***             */     
         struct huffman_node *rnext;     /* ***             */
@@ -16,6 +16,7 @@ struct huffman_node {                   /* example         */
 #define TMP_FILE                        "tmp.huffman"
 #define SRC_FILE                        "Screenshot.png"
 #define ONE_CHAR                        8
+#define ONE_SHORT                       16
 #define HUFFMAN_HEADER_SIZE             1024
 
 struct huffman_header {
@@ -31,8 +32,8 @@ struct huffman_header {
         char mtime[32];
         
         unsigned char bits[256];
-        unsigned char newcode[256];
-        char fillbits[256];
+        unsigned short newcode[256];
+        /*char fillbits[256];*/
 };
 
 /*struct huffman_header2 {*/

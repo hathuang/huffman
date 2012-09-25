@@ -554,7 +554,7 @@ int huffman_decompression()
         unsigned short decom_array[9][256];
         char filename[256];
         char rbuf[1024];
-        unsigned char bits, newcode;
+        unsigned short bits, newcode;
         //char *buf = NULL;
         int n, m, fd, i;
         int file_len;
@@ -584,23 +584,18 @@ int huffman_decompression()
                 }
         }
         i = 0;
+        // decom_array[bits][newcode]
+        // bits : 1-16 ; newcode : 0x0000-0xffff
         while (i < 256) { // 0x00 - 0xff 
-                //decom_array[bits][newcode]
-                //bits : 1-8 ; newcode : 0x00-0xff
                 bits = _header->bits[i];
                 m = bits & 0xff;
                 if (bits >= minbit && bits <= maxbit) {
                         if(i == 0) { // set it
-                                // set oldcode which=0x00 @ a special place,
-                                // details as follow.
-                                // decom_array[0][0]=bits of oldcode which = 0x00
-                                // decom_array[0][1]=newcode of oldcode which = 0x00
-                                // decom_array[0][2]=oldcode of oldcode which = 0x00, easily it's 0.
                                 decom_array[0][0] = bits;
                                 decom_array[0][1] = _header->newcode[i];
                                 decom_array[0][2] = 0x00;
                         } else {
-                                n = (_header->newcode[i]) & 0xff;
+                                n = (_header->newcode[i]) & 0xffff;
                                 decom_array[m][n] = i & 0xff;
                         }
                 }
@@ -633,13 +628,11 @@ int huffman_decompression()
         flag = 0;
         preflag = ONE_CHAR;
         do {
-                // Decompression
-                // TODO  there's a more easy method to do it 
                 if (i < (file_len - 1)) {// fixme
                         tmp = (buf[i] << (ONE_CHAR - preflag)) | ((buf[1+i] >> preflag) & ((1 << (ONE_CHAR - preflag)) - 1)); 
                 } else if (i == (file_len - 1) && preflag > 0) {
                         tmp = buf[i] << (last_ch_bits - preflag);
-                        printf("buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, (*(buf+i)) & 0xff, last_ch_bits, preflag);
+                        //printf("buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, (*(buf+i)) & 0xff, last_ch_bits, preflag);
                 } else {
                         break;
                 }
@@ -649,7 +642,6 @@ int huffman_decompression()
                         newcode = (tmp >> flag) & ((1 << bits) - 1); 
                         if (decom_array[bits][newcode] == '\0') {
                                 if (decom_array[0][0] == bits && decom_array[0][1] == newcode) {
-                                        // write to file
                                         oldcode = 0;
                                         str[0] = oldcode;
                                         if (1 != write(fd, str, 1)) {
@@ -658,14 +650,13 @@ int huffman_decompression()
                                                 free(buf);
                                                 return -1;
                                         }
-                                        printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
+                                        //printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
                                         break;
                                 } else {
                                         continue;
                                 }
                         } else {
-                                // write to file 
-                                oldcode = decom_array[bits][newcode]; 
+                                oldcode = decom_array[bits][newcode] & 0xff; 
                                 str[0] = oldcode;
                                 if (1 != write(fd, str, 1)) {
                                         syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to Decompression write : %s", __func__, str);
@@ -674,7 +665,7 @@ int huffman_decompression()
                                         return -1;
                                 }
                                 //syslog(LOG_USER | LOG_INFO, "%s : Decompression : %c . 0x%02x", __func__, oldcode, oldcode);
-                                printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
+                                //printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
                                 break;
                         }
                 }
@@ -682,13 +673,11 @@ int huffman_decompression()
                         ++i;
                         if (i == (file_len - 1)) {
                                 preflag = last_ch_bits - (bits - preflag);
-                                printf("xx buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, (*(buf+i))&0xff, last_ch_bits, preflag);
                                 continue;
                         } else {
                                 preflag = ONE_CHAR - (bits - preflag);
                         }
                         if (i >= file_len && preflag == ONE_CHAR) {
-                                printf("Decompression All goes well...\n");
                                 break;
                         }
                 } else {

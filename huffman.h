@@ -11,6 +11,14 @@ struct huffman_node {                   /* example         */
         struct huffman_node *next;      /* ***             */
 };
 
+struct tree {
+        unsigned char oldcode;
+        /*unsigned char bits;*/
+        /*unsigned short newcode;*/
+        struct tree *rchild;
+        struct tree *lchild;
+};
+
 struct huffman_tags {
         unsigned char fillbits[4];
         unsigned char magic;
@@ -22,11 +30,13 @@ struct huffman_tags {
 #define ALL_CHAR                        0x01 
 #define ALL_SHORT                       0x02 
 #define ALL_INT                         0x04 
+#define MAGIC_MAC                       0x0f
 #define HUFFMAN_SORT_BIG_FIRST          0x01
 #define HUFFMAN_SORT_SMALL_FIRST        0x02
 #define TMP_FILE                        "tmp.huffman"
 #define SRC_FILE                        "Screenshot.png"
 #define HUFFMAN_HEADER_SIZE             1024
+#define HUFFMAN_TAGS_SIZE               8
 #define ONE_CHAR                        8
 #define ONE_SHORT                       16
 #define ONE_INT                         32
@@ -48,34 +58,28 @@ struct huffman_header {
         /*char fillbits[256];*/
 };
 
-/*struct huffman_header2 {*/
-/*char tags[8];*/
-/*char magic[8];*/
-/*unsigned int tree_size;*/
-        /* insert tree body */
-        /* file body follows tree body */
-/*}*/
+/*extern int huffman_encode(char *encode_s, unsigned int length, struct huffman_header *header);*/
+extern int huffman_encode(char *src, unsigned int length, struct huffman_tags *tags);
 
-struct tar_header {
-        char name[100];
-        char mode[8];
-        char uid[8];
-        char gid[8];
-        char size[12];
-        char mtime[12];
-        char chksum[8];
-        char typeflag;
-        char linkname[100];
-        char magic[6];
-        char version[2];
-        char uname[32];
-        char gname[32];
-        char devmajor[8];
-        char devminor[8];
-        char prefix[155];
-        char padding[12];
-};
+/*
+                huffman file arch
 
-extern int huffman_encode(char *encode_s, unsigned int length, struct huffman_header *header);
-
+-------------------------------------------------
+|                                               |
+|             huffman_tags(8 bytes)             |
+|                                               |
+|------------------------------------------------
+|         |         |                           |
+| 1 byte  | 1byte   | 1 or 2 bytes(as tags say) |
+|         |         |                           |
+|---------+---------+----------------------------
+|         |         |                           |
+| oldcode | bits    | newcode                   |
+|         |         |                           |
+|------------------------------------------------
+|                                               |
+|                file body                      |
+|                                               |
+-------------------------------------------------
+*/
 #endif // huffman.h

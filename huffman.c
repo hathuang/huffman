@@ -335,10 +335,15 @@ int print_newcode(struct huffman_node **head, int flag)
 int huffman_array(struct huffman_node **head, unsigned short (*arr)[2], struct huffman_tags *tags)
 {
         struct huffman_node *q = *head;
-        int n;
+        int n, m;
+        char abits = 0;
 
         if (!q || !arr || !tags) {
                 return -1;
+        }
+        // init
+        for (n = 0; n < 2; n++) {
+                for (m = 0; m < 256; m++) arr[m][n] = 0;
         }
 /*      
  array arch :
@@ -353,6 +358,7 @@ int huffman_array(struct huffman_node **head, unsigned short (*arr)[2], struct h
                         continue;
                 }
                 n = (q->data) & 0xff;
+                abits = q->bits;
                 arr[n][0] = q->bits;
                 arr[n][1] = q->newcode;
                 if (q->bits <= ONE_CHAR) {
@@ -372,11 +378,11 @@ int huffman_array(struct huffman_node **head, unsigned short (*arr)[2], struct h
                 //syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode:%c=0x%x, bits:%d, newcode=0x%x", __func__, q->data, q->data & 0xff, arr[n][0], arr[n][1]&0xffff);
         } while (q = q->next);
         if (tags->bytes1 == 0 && tags->bytes2 == 0 && tags->bytes4 == 0) {
-                if (head->bits <= ONE_CHAR) {
+                if (abits <= ONE_CHAR && abits > 0) {
                         tags->magic = ALL_CHAR;
-                } else if (ONE_CHAR < head->bits && head->bits <= ONE_SHORT) {
+                } else if (ONE_CHAR < abits && abits <= ONE_SHORT) {
                         tags->magic = ALL_SHORT;
-                } else if (ONE_SHORT < head->bits && head->bits <= ONE_INT) {
+                } else if (ONE_SHORT < abits && abits <= ONE_INT) {
                         tags->magic = ALL_INT;
                 } else {
                         return -1;
@@ -393,10 +399,11 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
         char *str = src;
         unsigned int i;
         unsigned char bits = 0;
-        char newstr[2];
+        char newstr[4];
         int ret, len, n;
         
-        unsigned char maxbit, minbit, flag;
+        //unsigned char maxbit, minbit, 
+        unsigned char flag;
 
         //arr[ch][0] // bits
         //arr[ch][1] // newcode
@@ -404,19 +411,38 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
         if (!length || !tags) {
                 syslog(LOG_USER | LOG_ERR , "%s : Ugly params", __func__);
                 return -1;
-        } 
+        }
         int fd = open(TMP_FILE, O_RDWR | O_TRUNC | O_CREAT, 0644); 
         if (fd < 0) {
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s", __func__, TMP_FILE);
                 return -1;
         }
         // write huffman_tags
+        tags->magic |= ONE_CHAR << 4;
         ret = write(fd, (char *)tags, len = sizeof(struct huffman_tags));
         if (ret != len) {
+                close(fd);
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write huffman_tags to : %s, ret=%d,len=%d", __func__, TMP_FILE, ret, len);
                 return -1;
         }
-        // newcode 
+        // write newcode 
+        i = 0;
+        while (i < 256) {
+                if (arr[i][0]) {
+                        newstr[0] = i & 0xff;                // oldcode 1 byte
+                        newstr[1] = arr[i][0];               // bits    1 byte
+                        newstr[2] = (arr[i][1] >> 8) & 0xff; // newcode 2 bytes
+                        newstr[3] = arr[i][1] & 0xff;        // newcode 2 bytes
+                        if (4 != write(fd, newstr, 4)) {
+                                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write huffman newcode to : %s.", __func__, TMP_FILE);
+                                close(fd);
+                                return -1;
+                        }
+                }
+                ++i;
+        }
+        // write file body
+
 
         /*
         i = 0;
@@ -497,15 +523,16 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                         close(fd);
                         return -1;
                 }
-                header->typeflag[2] = flag & (header->typeflag[2] - 1);
+                tags->magic &= 0x0f;
+                tags->magic |= (flag << 4) & 0xf0;
                 //syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression ~ : 0x%02x, flag = %d", __func__, newstr[0], flag);
                 if (lseek(fd, 0, SEEK_SET) < 0) {
                         syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to lseek . errno=%d", __func__, errno);
                         close(fd);
                         return -1;
                 }
-                if (write(fd, (char *)header, HUFFMAN_HEADER_SIZE) != HUFFMAN_HEADER_SIZE) {
-                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, len=%d", __func__, TMP_FILE, HUFFMAN_HEADER_SIZE);
+                if (write(fd, (char *)tags, HUFFMAN_TAGS_SIZE) != HUFFMAN_TAGS_SIZE) {
+                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, len=%d", __func__, TMP_FILE, HUFFMAN_TAGS_SIZE);
                         close(fd);
                         return -1;
                 }
@@ -556,7 +583,7 @@ int get_file_buf(const char *filename, char *_buf, int file_len)
                 return -1;
         } 
         int fd = open(filename, O_RDONLY); 
-        if (!fd) {
+        if (fd < 0) {
                 perror("Fail to open TMP_FILE");
                 return -1;
         }
@@ -575,17 +602,247 @@ int get_file_buf(const char *filename, char *_buf, int file_len)
                 }
                 len += ret;
         }
-        //syslog(LOG_SYSTEM | LOG_ERR, "%s : ### get enough bytes : %d is wanna, but get %d", __func__, file_len , len);
         close(fd);
-        printf("$$$$$$$$$$$$$$$$$$$ ### get enough bytes : %d is wanna, but get %d\n", file_len , len);
         return 0;
 }
 
+int get_root(char *buf, int n, struct tree *root)
+{
+        int i, bits, k;
+        char oldcode, onebit;
+        unsigned short newcode;
+        struct tree *p = root;
+        struct tree *q = NULL;;
+/*
+        newstr[0] = i & 0xff;                // oldcode 1 byte
+        newstr[1] = arr[i][0];               // bits    1 byte
+        newstr[2] = (arr[i][1] >> 8) & 0xff; // newcode 2 bytes
+        newstr[3] = arr[i][1] & 0xff;        // newcode 2 bytes
+*/
+        if (!buf || !n || !root) return -1;
+        i = 0;
+        while (i < n) {
+                k = (i << 2) & (~0x03);
+                oldcode = buf[k + 0];
+                bits = buf[k + 1];
+                newcode = buf[k + 2];
+                newcode <<= 8;
+                newcode |= buf[k + 3];
+                p = root;
+                while (bits) {
+                        onebit = (newcode >> (--bits)) & 0x01;
+                        if (onebit) {
+                                if (!(q = p->rchild)) {
+                                        if (!(q = (struct tree *)malloc(sizeof(struct tree)))) return -1;
+                                        q->rchild = NULL;
+                                        q->lchild = NULL;
+                                        p->rchild = q;
+                                }
+                                p = q;
+                        } else {
+                                if (!(q = p->lchild)) {
+                                        if (!(q = (struct tree *)malloc(sizeof(struct tree)))) return -1;
+                                        q->rchild = NULL;
+                                        q->lchild = NULL;
+                                        p->lchild = q;
+                                }
+                                p = q;
+                        }
+                }
+                if (!q) return -1; 
+                q->oldcode = oldcode;
+        }
+
+        return 0;
+}
+
+int huffman_decomp_tree(const char *filename, struct tree **tree, char **filebuf, unsigned int *_filelen, char *last_ch_bits)
+{
+        char buf[1024];
+        int fd, ret, len, codenum;
+        unsigned int filelen;
+        struct huffman_tags *tags = NULL;
+        struct tree *root = NULL;
+
+        if (!filename || !tree || !_filelen || !last_ch_bits) {
+                return -1;
+        }
+        fd = open(filename, O_RDONLY); 
+        if (fd < 0) {
+                perror("Fail to open TMP_FILE");
+                return -1;
+        }
+        if ((filelen = lseek(fd, 0, SEEK_END)) <= 0 || lseek(fd, 0, SEEK_SET) < 0) {
+                close(fd);
+                return -1;
+        }
+        len = read(fd, buf, HUFFMAN_TAGS_SIZE);
+        if (len != HUFFMAN_TAGS_SIZE) return -1;
+        tags = (struct huffman_tags *)buf;
+        switch (tags->magic & MAGIC_MAC) {
+        case ALL_INT :
+        case ALL_CHAR :
+        case ALL_SHORT :
+                len = 256;
+                break;
+        default :
+                len = tags->bytes1 + tags->bytes2 + tags->bytes4;
+                break;
+        }
+        *last_ch_bits = (tags->magic >> 4) & MAGIC_MAC;
+        tags = NULL;
+        codenum = len;
+        len = (len << 2) & (~0x03); // * 4
+        filelen -= HUFFMAN_TAGS_SIZE;
+        if (len >= filelen || len > 1024 || len != read(fd, buf, len)) {
+                close(fd);
+                return -1;
+        }
+        filelen -= len;
+        if (!(*filebuf = (char *)malloc(sizeof(char) * (filelen + 1)))) {
+                perror("fail to malloc for filebuf");
+                close(fd);
+                return -1;
+        }
+        len = 0;
+        while (len < filelen) {
+                ret = read(fd, *filebuf + len, filelen - len);
+                if (ret <= 0) {
+                        perror("Fail to read TMP_FILE.");
+                        free(*filebuf);
+                        *filebuf = NULL;
+                        close(fd);
+                        return -1;
+                }
+                len += ret;
+        }
+        close(fd);
+        // get the tree;
+        if (!(root = (struct tree *)malloc(sizeof(struct tree)))) {
+                perror("fail to malloc for root of tree");
+                free(*filebuf);
+                *filebuf = NULL;
+                return -1;
+        }
+        root->oldcode = 0;
+        root->rchild = NULL;
+        root->lchild = NULL;
+        *tree = root;
+        *_filelen = filelen;
+
+        return get_root(buf, codenum, root); 
+}
+
+int free_tree(struct tree *root)
+{
+        struct tree *p = root;
+
+        if (!p) return 0;
+        if (p->rchild) {
+                free_tree(p->rchild);
+        }
+        if (p->lchild) {
+                free_tree(p->lchild);
+        }
+        free(p);
+        return 0;
+}
+
+#if 1
+int huffman_decompression()
+{
+        //int huffman_decomp_tree(const char *filename, struct tree **tree, char **filebuf, int *_filelen)
+        struct tree *root = NULL;
+        unsigned int i, file_len;
+        char *buf = NULL;
+        char flag, preflag, tmp, last_ch_bits;
+        int fd;
+
+        if (huffman_decomp_tree(TMP_FILE, &root, &buf, &file_len, &last_ch_bits)) {
+                syslog(LOG_USER | LOG_ERR, "%s : fail to huffman_decomp_tree", __func__);
+                // distory root
+                if (buf) free(buf);
+                if (root) free_tree(root); 
+                return -1;
+        }
+
+        i = 0;
+        flag = 0;
+        preflag = ONE_CHAR;
+        do {
+                if (i < (file_len - 1)) {// fixme
+                        tmp = (buf[i] << (ONE_CHAR - preflag)) | ((buf[1+i] >> preflag) & ((1 << (ONE_CHAR - preflag)) - 1)); 
+                } else if (i == (file_len - 1) && preflag > 0) {
+                        tmp = buf[i] << (last_ch_bits - preflag);
+                        //printf("buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, (*(buf+i)) & 0xff, last_ch_bits, preflag);
+                } else {
+                        break;
+                }
+                /////////////////////
+                printf("%s : Decompression : buf[%03d]=%c=0x%02x.\n", __func__, i, buf[i], buf[i]&0xff);
+                for (bits = minbit; bits <= maxbit; bits++) {
+                        flag = ONE_CHAR - bits;
+                        newcode = (tmp >> flag) & ((1 << bits) - 1); 
+                        if (decom_array[bits][newcode] == '\0') {
+                                if (decom_array[0][0] == bits && decom_array[0][1] == newcode) {
+                                        oldcode = 0;
+                                        str[0] = oldcode;
+                                        if (1 != write(fd, str, 1)) {
+                                                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to Decompression write : %s", __func__, str);
+                                                close(fd);
+                                                free(buf);
+                                                return -1;
+                                        }
+                                        //printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
+                                        break;
+                                } else {
+                                        continue;
+                                }
+                        } else {
+                                oldcode = decom_array[bits][newcode] & 0xff; 
+                                str[0] = oldcode;
+                                if (1 != write(fd, str, 1)) {
+                                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to Decompression write : %s", __func__, str);
+                                        close(fd);
+                                        free(buf);
+                                        return -1;
+                                }
+                                //syslog(LOG_USER | LOG_INFO, "%s : Decompression : %c . 0x%02x", __func__, oldcode, oldcode);
+                                //printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
+                                break;
+                        }
+                }
+                if (preflag <= bits) {
+                        ++i;
+                        if (i == (file_len - 1)) {
+                                preflag = last_ch_bits - (bits - preflag);
+                                continue;
+                        } else {
+                                preflag = ONE_CHAR - (bits - preflag);
+                        }
+                        if (i >= file_len && preflag == ONE_CHAR) {
+                                break;
+                        }
+                } else {
+                        preflag -= bits;
+                }
+        } while (i < file_len || preflag > 0);
+        close(fd);
+
+
+
+
+
+
+
+}
+
+#else
 int huffman_decompression()
 {
         unsigned short decom_array[9][256];
         char filename[256];
-        char rbuf[1024];
+        char rbuf[8];
         unsigned short bits, newcode;
         int n, m, fd, i;
         int file_len;
@@ -593,8 +850,6 @@ int huffman_decompression()
         char flag, preflag, last_ch_bits, oldcode;
         char str[2] = {0,0};
         char *buf = NULL;
-        //struct huffman_header *_header = (struct huffman_header *)malloc(sizeof(struct huffman_header));
-        struct huffman_header *_header = (struct huffman_header *)rbuf;
 
         // 1. get the array
         if (get_header(TMP_FILE, _header, &file_len)) {
@@ -722,8 +977,9 @@ int huffman_decompression()
 
         return 0;
 }
+#endif
 
-int huffman_encode(char *str, unsigned int length, struct huffman_tags *tags)
+int huffman_encode(char *src, unsigned int length, struct huffman_tags *tags)
 {
         struct huffman_node *head = NULL;
         struct huffman_node *node = NULL;

@@ -375,7 +375,7 @@ int huffman_array(struct huffman_node **head, unsigned short (*arr)[2], struct h
 
                 //header->bits[n] = q->bits; 
                 //header->newcode[n] = q->newcode; 
-                //syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode:%c=0x%x, bits:%d, newcode=0x%x", __func__, q->data, q->data & 0xff, arr[n][0], arr[n][1]&0xffff);
+                syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode:%c=0x%x, bits:%d, newcode=0x%x", __func__, q->data, q->data & 0xff, arr[n][0], arr[n][1]&0xffff);
         } while (q = q->next);
         if (tags->bytes1 == 0 && tags->bytes2 == 0 && tags->bytes4 == 0) {
                 if (abits <= ONE_CHAR && abits > 0) {
@@ -401,6 +401,7 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
         unsigned char bits = 0;
         char newstr[4];
         int ret, len, n;
+        int x;
         
         //unsigned char maxbit, minbit, 
         unsigned char flag;
@@ -475,6 +476,7 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
         */
         i = 0;
         flag = 0;
+        x = 0;
         while (i < length) {
                 ch = *(str + i++);
                 n = ch & 0xff;
@@ -493,6 +495,8 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                                 close(fd);
                                 return -1;
                         }
+                        syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression 1 : 0x%02x", __func__, newstr[0] & 0xff);
+                        x++;
                         flag -= ONE_CHAR;
                         newchar = arr[n][1] & ((1 << flag) - 1);
                 } else { // >= ONE_SHORT
@@ -507,6 +511,7 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                                 close(fd);
                                 return -1;
                         }
+                        x += 2;
                         newchar = arr[n][1] & ((1 << flag) - 1);
                 }
         }
@@ -517,15 +522,16 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                         close(fd);
                         return -1;
                 }
-                newstr[0] = newchar << (ONE_CHAR - flag);
+                newstr[0] = newchar;// << (ONE_CHAR - flag);
                 if (1 != (ret = write(fd, newstr, 1))) {
                         syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, ret=%d,flag=%d", __func__, TMP_FILE, ret, flag);
                         close(fd);
                         return -1;
                 }
+                x++;
                 tags->magic &= 0x0f;
                 tags->magic |= (flag << 4) & 0xf0;
-                //syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression ~ : 0x%02x, flag = %d", __func__, newstr[0], flag);
+                syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression ~ : 0x%02x, flag = %d", __func__, newstr[0] & 0xff, flag);
                 if (lseek(fd, 0, SEEK_SET) < 0) {
                         syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to lseek . errno=%d", __func__, errno);
                         close(fd);
@@ -536,9 +542,10 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                         close(fd);
                         return -1;
                 }
-                //syslog(LOG_USER | LOG_INFO, "%s : minbit = %d maxbit = %d.", __func__, header->typeflag[0], header->typeflag[1]);
         }
         close(fd);
+        syslog(LOG_USER | LOG_INFO, "%s : xxxxxxxxxxxxxx = %d.", __func__, x);
+
         return 0;
 }
 
@@ -651,6 +658,7 @@ int get_root(char *buf, int n, struct tree *root)
                 }
                 if (!q) return -1; 
                 q->oldcode = oldcode;
+                ++i;
         }
 
         return 0;
@@ -729,6 +737,7 @@ int huffman_decomp_tree(const char *filename, struct tree **tree, char **filebuf
         root->lchild = NULL;
         *tree = root;
         *_filelen = filelen;
+        printf("%s start to get_root\n", __func__);
 
         return get_root(buf, codenum, root); 
 }
@@ -744,6 +753,7 @@ int free_tree(struct tree *root)
         if (p->lchild) {
                 free_tree(p->lchild);
         }
+        if (!(p->rchild)) syslog(LOG_USER | LOG_ERR, "%s : free oldcode = %c = 0x%x", __func__, p->oldcode, p->oldcode);
         free(p);
         return 0;
 }
@@ -751,13 +761,14 @@ int free_tree(struct tree *root)
 #if 1
 int huffman_decompression()
 {
-        //int huffman_decomp_tree(const char *filename, struct tree **tree, char **filebuf, int *_filelen)
         struct tree *root = NULL;
+        struct tree *p = NULL;
         unsigned int i, file_len;
         char *buf = NULL;
-        char flag, preflag, tmp, last_ch_bits;
-        int fd;
+        char preflag, last_ch_bits, abit;
+        int fd, x;
 
+        printf("%s : Before huffman_decomp_tree\n", __func__);
         if (huffman_decomp_tree(TMP_FILE, &root, &buf, &file_len, &last_ch_bits)) {
                 syslog(LOG_USER | LOG_ERR, "%s : fail to huffman_decomp_tree", __func__);
                 // distory root
@@ -765,76 +776,54 @@ int huffman_decompression()
                 if (root) free_tree(root); 
                 return -1;
         }
-
+        printf("%s : After huffman_decomp_tree\n", __func__);
+        fd = open("test.png", O_RDWR | O_TRUNC | O_CREAT, 0644);
+        if (fd < 0) {
+                if (buf) free(buf);
+                if (root) free_tree(root); 
+                return -1;
+        }
         i = 0;
-        flag = 0;
-        preflag = ONE_CHAR;
+        x = 0;
+        preflag = ONE_CHAR; // current buf[i] remain to use.
         do {
-                if (i < (file_len - 1)) {// fixme
-                        tmp = (buf[i] << (ONE_CHAR - preflag)) | ((buf[1+i] >> preflag) & ((1 << (ONE_CHAR - preflag)) - 1)); 
-                } else if (i == (file_len - 1) && preflag > 0) {
-                        tmp = buf[i] << (last_ch_bits - preflag);
-                        //printf("buf[%d]=0x%02x, last_ch_bits=%d, preflag=%d\n", i, (*(buf+i)) & 0xff, last_ch_bits, preflag);
-                } else {
-                        break;
-                }
-                /////////////////////
-                printf("%s : Decompression : buf[%03d]=%c=0x%02x.\n", __func__, i, buf[i], buf[i]&0xff);
-                for (bits = minbit; bits <= maxbit; bits++) {
-                        flag = ONE_CHAR - bits;
-                        newcode = (tmp >> flag) & ((1 << bits) - 1); 
-                        if (decom_array[bits][newcode] == '\0') {
-                                if (decom_array[0][0] == bits && decom_array[0][1] == newcode) {
-                                        oldcode = 0;
-                                        str[0] = oldcode;
-                                        if (1 != write(fd, str, 1)) {
-                                                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to Decompression write : %s", __func__, str);
-                                                close(fd);
-                                                free(buf);
-                                                return -1;
-                                        }
-                                        //printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
-                                        break;
+                p = root;
+                while (p->lchild) {
+                        printf("i = %d, file_len = %d\n", i, file_len);
+                        abit = (buf[i] >> (--preflag)) & 0x01;
+                        if (abit) {
+                                p = p->rchild;
+                        } else {
+                                p = p->lchild;
+                        }
+                        if (!preflag) {
+                                syslog(LOG_USER | LOG_INFO, "%s : read buf[%d] = 0x%x", __func__, i, buf[i] & 0xff);
+                                ++i;
+                                if (i < (file_len - 1)) {
+                                        preflag = ONE_CHAR;
+                                } else if (i == (file_len - 1)) {
+                                        preflag = last_ch_bits;
+                                        printf("xxxxxxxxx = last_ch_bits %d\n", last_ch_bits);
                                 } else {
-                                        continue;
+                                        printf("xxxxxxxxx = %d\n", x);
+                                        //goto THE_END;
+                                        break;
                                 }
-                        } else {
-                                oldcode = decom_array[bits][newcode] & 0xff; 
-                                str[0] = oldcode;
-                                if (1 != write(fd, str, 1)) {
-                                        syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to Decompression write : %s", __func__, str);
-                                        close(fd);
-                                        free(buf);
-                                        return -1;
-                                }
-                                //syslog(LOG_USER | LOG_INFO, "%s : Decompression : %c . 0x%02x", __func__, oldcode, oldcode);
-                                //printf("%s : Decompression : %c . 0x%02x. bits=%d, newcode=0x%02x\n", __func__, oldcode, oldcode, bits, newcode);
-                                break;
                         }
                 }
-                if (preflag <= bits) {
-                        ++i;
-                        if (i == (file_len - 1)) {
-                                preflag = last_ch_bits - (bits - preflag);
-                                continue;
-                        } else {
-                                preflag = ONE_CHAR - (bits - preflag);
-                        }
-                        if (i >= file_len && preflag == ONE_CHAR) {
-                                break;
-                        }
-                } else {
-                        preflag -= bits;
-                }
+                syslog(LOG_USER | LOG_INFO, "%s : ** read buf[%d] = 0x%x , preflag = %d, x = %d, ch=%c=0x%x. ", __func__, i, buf[i] & 0xff,preflag, x, p->oldcode, p->oldcode);
+                if (!(p->lchild) && 1 != write(fd, &(p->oldcode), 1)) return -1;
+                x++;
         } while (i < file_len || preflag > 0);
+        syslog(LOG_USER | LOG_INFO, "%s : ------------", __func__);
+THE_END:
+        syslog(LOG_USER | LOG_INFO, "%s : ------------ preflag = %d", __func__, preflag);
         close(fd);
 
+        if (buf) free(buf);
+        if (root) free_tree(root); 
 
-
-
-
-
-
+        return 0;
 }
 
 #else

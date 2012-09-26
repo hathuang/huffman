@@ -82,6 +82,9 @@ int main(int argc, char *argv[])
                 }
                 len += ret;
         }
+        //if (*(_buf + file_len - 1) == '\n') {
+        //*(_buf + (--file_len)) = 0;    
+        //} 
 
         close(fd);
         //if (huffman_encode(_buf, file_len, header)) {

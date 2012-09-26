@@ -332,12 +332,12 @@ int print_newcode(struct huffman_node **head, int flag)
         return 0;
 }
 
-int huffman_array(struct huffman_node **_head, unsigned short (*arr)[2], struct huffman_header *header)
+int huffman_array(struct huffman_node **head, unsigned short (*arr)[2], struct huffman_tags *tags)
 {
-        struct huffman_node *q = *_head;
+        struct huffman_node *q = *head;
         int n;
 
-        if (!q || !arr || !header) {
+        if (!q || !arr || !tags) {
                 return -1;
         }
 /*      
@@ -355,15 +355,38 @@ int huffman_array(struct huffman_node **_head, unsigned short (*arr)[2], struct 
                 n = (q->data) & 0xff;
                 arr[n][0] = q->bits;
                 arr[n][1] = q->newcode;
-                header->bits[n] = q->bits; 
-                header->newcode[n] = q->newcode; 
-                syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode:%c=0x%x, bits:%d, newcode=0x%x", __func__, q->data, q->data & 0xff, arr[n][0], arr[n][1]&0xffff);
+                if (q->bits <= ONE_CHAR) {
+                        tags->bytes1++;
+                } else if (ONE_CHAR < q->bits && q->bits <= ONE_SHORT) {
+                        tags->bytes2++;
+                } else if (ONE_SHORT < q->bits && q->bits <= ONE_INT) {
+                        syslog(LOG_USER | LOG_EMERG, "%s : too large bits : %d", __func__, q->bits);
+                        tags->bytes4++;
+                } else {
+                        syslog(LOG_USER | LOG_EMERG, "%s : too large bits : %d", __func__, q->bits);
+                        return -1;
+                }
+
+                //header->bits[n] = q->bits; 
+                //header->newcode[n] = q->newcode; 
+                //syslog(LOG_SYSTEM | LOG_INFO, "%s : oldcode:%c=0x%x, bits:%d, newcode=0x%x", __func__, q->data, q->data & 0xff, arr[n][0], arr[n][1]&0xffff);
         } while (q = q->next);
+        if (tags->bytes1 == 0 && tags->bytes2 == 0 && tags->bytes4 == 0) {
+                if (head->bits <= ONE_CHAR) {
+                        tags->magic = ALL_CHAR;
+                } else if (ONE_CHAR < head->bits && head->bits <= ONE_SHORT) {
+                        tags->magic = ALL_SHORT;
+                } else if (ONE_SHORT < head->bits && head->bits <= ONE_INT) {
+                        tags->magic = ALL_INT;
+                } else {
+                        return -1;
+                }
+        }
         
         return 0;
 }
 
-int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length, struct huffman_header *header)
+int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length, struct huffman_tags *tags)
 {
         unsigned char ch = '\0';
         unsigned char newchar = '\0';
@@ -378,7 +401,7 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
         //arr[ch][0] // bits
         //arr[ch][1] // newcode
 
-        if (!length || !header) {
+        if (!length || !tags) {
                 syslog(LOG_USER | LOG_ERR , "%s : Ugly params", __func__);
                 return -1;
         } 
@@ -387,7 +410,15 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to open : %s", __func__, TMP_FILE);
                 return -1;
         }
-        // write huffman_header
+        // write huffman_tags
+        ret = write(fd, (char *)tags, len = sizeof(struct huffman_tags));
+        if (ret != len) {
+                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write huffman_tags to : %s, ret=%d,len=%d", __func__, TMP_FILE, ret, len);
+                return -1;
+        }
+        // newcode 
+
+        /*
         i = 0;
         len = sizeof(header->newcode);
         flag = 1;
@@ -415,6 +446,7 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                 syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, ret=%d,len=%d", __func__, TMP_FILE, ret, len);
                 return -1;
         }
+        */
         i = 0;
         flag = 0;
         while (i < length) {
@@ -555,7 +587,6 @@ int huffman_decompression()
         char filename[256];
         char rbuf[1024];
         unsigned short bits, newcode;
-        //char *buf = NULL;
         int n, m, fd, i;
         int file_len;
         unsigned char tmp, minbit, maxbit;
@@ -692,14 +723,14 @@ int huffman_decompression()
         return 0;
 }
 
-int huffman_encode(char *_str, unsigned int length, struct huffman_header *header)
+int huffman_encode(char *str, unsigned int length, struct huffman_tags *tags)
 {
         struct huffman_node *head = NULL;
         struct huffman_node *node = NULL;
         unsigned short array[256][2];
         
         head = (struct huffman_node *)malloc(sizeof(struct huffman_node));
-        char *src = _str;
+        //char *src = _str;
 
         print_debug("enter huffman\n");
         //syslog(LOG_SYSTEM | LOG_INFO, "%s : hello huffman", __func__);
@@ -747,7 +778,7 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
         }
         
         print_debug("start to huffman_array\n");
-        if (huffman_array(&node, array, header)) {
+        if (huffman_array(&node, array, tags)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_array", __func__);
                 node_distory(&node);
                 //huffman_root_distory(&head);
@@ -758,7 +789,7 @@ int huffman_encode(char *_str, unsigned int length, struct huffman_header *heade
         //huffman_root_distory(&head);
         // Compression 
         print_debug("start to huffman_compression\n");
-        if (huffman_compression(array, src, length, header)) {
+        if (huffman_compression(array, src, length, tags)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_compression", __func__);
                 return -1;
         }

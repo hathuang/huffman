@@ -11,13 +11,25 @@ struct huffman_node {                   /* example         */
         struct huffman_node *next;      /* ***             */
 };
 
+struct huffman_tags {
+        unsigned char fillbits[4];
+        unsigned char magic;
+        unsigned char bytes1;
+        unsigned char bytes2;
+        unsigned char bytes4;
+};
+
+#define ALL_CHAR                        0x01 
+#define ALL_SHORT                       0x02 
+#define ALL_INT                         0x04 
 #define HUFFMAN_SORT_BIG_FIRST          0x01
 #define HUFFMAN_SORT_SMALL_FIRST        0x02
 #define TMP_FILE                        "tmp.huffman"
 #define SRC_FILE                        "Screenshot.png"
+#define HUFFMAN_HEADER_SIZE             1024
 #define ONE_CHAR                        8
 #define ONE_SHORT                       16
-#define HUFFMAN_HEADER_SIZE             1024
+#define ONE_INT                         32
 
 struct huffman_header {
         char name[128];         /* test.mp3        */

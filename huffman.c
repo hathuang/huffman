@@ -410,7 +410,7 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
         //arr[ch][1] // newcode
 
         if (!length || !tags) {
-                syslog(LOG_USER | LOG_ERR , "%s : Ugly params", __func__);
+                //syslog(LOG_USER | LOG_ERR , "%s : Ugly params", __func__);
                 return -1;
         }
         int fd = open(TMP_FILE, O_RDWR | O_TRUNC | O_CREAT, 0644); 
@@ -443,37 +443,6 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                 ++i;
         }
         // write file body
-
-
-        /*
-        i = 0;
-        len = sizeof(header->newcode);
-        flag = 1;
-        while (i < len) {
-                if (header->bits[i]) {
-                        if (flag) {
-                                flag = 0;
-                                maxbit = header->bits[i]; 
-                                minbit = maxbit;
-                        } else if (maxbit < header->bits[i]) {
-                                maxbit = header->bits[i];
-                        } else if (minbit > header->bits[i]) {
-                                minbit = header->bits[i];
-                        }
-                }
-                ++i;
-        }
-        header->typeflag[2] = ONE_CHAR; // the last char is full used default 
-        header->typeflag[1] = maxbit;
-        header->typeflag[0] = minbit;
-        //syslog(LOG_USER | LOG_INFO, "%s : minbit = %d maxbit = %d.", __func__, header->typeflag[0], header->typeflag[1]);
-        len = sizeof(struct huffman_header);
-        ret = write(fd, (char *)header, len);
-        if (ret != len) {
-                syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to write to : %s, ret=%d,len=%d", __func__, TMP_FILE, ret, len);
-                return -1;
-        }
-        */
         i = 0;
         flag = 0;
         x = 0;
@@ -486,8 +455,12 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                         newchar = newchar << bits;
                         newchar |= arr[n][1] & ((1 << bits) - 1);
                         continue;
-                } else if (flag >= ONE_CHAR && flag < ONE_SHORT) {
+                } else if (flag >= ONE_CHAR && flag < ONE_SHORT) { // FIXME
+                        if (bits > ONE_CHAR) {
+                                syslog(LOG_SYSTEM | LOG_ERR, "%s : == bits=%d, flag=%d, newchar=0x%x", __func__, bits, flag, newchar);
+                        }
                         newchar = newchar << (ONE_CHAR - (flag - bits));
+                        //newchar |= (arr[n][1] >> (flag - ((bits > ONE_CHAR) ? bits : ONE_CHAR))) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
                         newchar |= (arr[n][1] >> (flag - ONE_CHAR)) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
                         newstr[0] = newchar;
                         if (1 != (ret = write(fd, newstr, 1))) {
@@ -495,10 +468,13 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                                 close(fd);
                                 return -1;
                         }
-                        syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression 1 : 0x%02x", __func__, newstr[0] & 0xff);
+                        syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression 1 : x=%04d 0x%02x", __func__, x, newstr[0] & 0xff);
                         x++;
                         flag -= ONE_CHAR;
                         newchar = arr[n][1] & ((1 << flag) - 1);
+                        if (bits > ONE_CHAR) {
+                                syslog(LOG_SYSTEM | LOG_ERR, "%s : == bits=%d, flag=%d, newchar=0x%x, newcode=%c=0x%x", __func__, bits, flag, newchar, arr[n][1], arr[n][1]&0xffff);
+                        }
                 } else { // >= ONE_SHORT
                         newchar = newchar << (ONE_CHAR - (flag - bits));
                         newchar |= (arr[n][1] >> (flag - ONE_CHAR)) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
@@ -528,10 +504,10 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                         close(fd);
                         return -1;
                 }
-                x++;
                 tags->magic &= 0x0f;
                 tags->magic |= (flag << 4) & 0xf0;
-                syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression ~ : 0x%02x, flag = %d", __func__, newstr[0] & 0xff, flag);
+                syslog(LOG_SYSTEM | LOG_WARNING, "%s : out Compression ~ : x=%04d 0x%02x, flag = %d", __func__, x, newstr[0] & 0xff, flag);
+                x++;
                 if (lseek(fd, 0, SEEK_SET) < 0) {
                         syslog(LOG_SYSTEM | LOG_ERR, "%s : fail to lseek . errno=%d", __func__, errno);
                         close(fd);
@@ -632,9 +608,9 @@ int get_root(char *buf, int n, struct tree *root)
                 k = (i << 2) & (~0x03);
                 oldcode = buf[k + 0];
                 bits = buf[k + 1];
-                newcode = buf[k + 2];
-                newcode <<= 8;
+                newcode = buf[k + 2] << 8;
                 newcode |= buf[k + 3];
+                syslog(LOG_USER | LOG_INFO, "%s : i new %04d bits = %d =0x%x", __func__, i, bits, newcode & 0xffff);
                 p = root;
                 while (bits) {
                         onebit = (newcode >> (--bits)) & 0x01;
@@ -724,6 +700,12 @@ int huffman_decomp_tree(const char *filename, struct tree **tree, char **filebuf
                 }
                 len += ret;
         }
+        //ret = 0;
+        //while (ret < filelen) {
+        //syslog(LOG_USER | LOG_INFO, "%s : file buf %04d %c=0x%x", __func__, ret, *(*filebuf + ret), *(*filebuf + ret) & 0xff);
+        //++ret;
+        //}
+
         close(fd);
         // get the tree;
         if (!(root = (struct tree *)malloc(sizeof(struct tree)))) {
@@ -745,12 +727,15 @@ int huffman_decomp_tree(const char *filename, struct tree **tree, char **filebuf
 int free_tree(struct tree *root)
 {
         struct tree *p = root;
+        //static unsigned short newcode = 0;
 
         if (!p) return 0;
         if (p->rchild) {
+                //newcode = (newcode << 1) | 0x01;
                 free_tree(p->rchild);
         }
         if (p->lchild) {
+                //newcode = (newcode << 1) & 0xfffe;
                 free_tree(p->lchild);
         }
         if (!(p->rchild)) syslog(LOG_USER | LOG_ERR, "%s : free oldcode = %c = 0x%x", __func__, p->oldcode, p->oldcode);

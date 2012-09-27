@@ -520,7 +520,7 @@ int huffman_compression(unsigned short (*arr)[2], char *src, unsigned int length
                 }
         }
         close(fd);
-        syslog(LOG_USER | LOG_INFO, "%s : xxxxxxxxxxxxxx = %d.", __func__, x);
+        //syslog(LOG_USER | LOG_INFO, "%s : xxxxxxxxxxxxxx = %d.", __func__, x);
 
         return 0;
 }
@@ -594,7 +594,7 @@ int get_root(char *buf, int n, struct tree *root)
         int i, bits, k;
         char oldcode, onebit;
         unsigned short newcode;
-        struct tree *p = root;
+        struct tree *p = NULL;;
         struct tree *q = NULL;;
 /*
         newstr[0] = i & 0xff;                // oldcode 1 byte
@@ -606,27 +606,38 @@ int get_root(char *buf, int n, struct tree *root)
         i = 0;
         while (i < n) {
                 k = (i << 2) & (~0x03);
-                oldcode = buf[k + 0];
-                bits = buf[k + 1];
-                newcode = buf[k + 2] << 8;
-                newcode |= buf[k + 3];
-                syslog(LOG_USER | LOG_INFO, "%s : i new %04d bits = %d =0x%x", __func__, i, bits, newcode & 0xffff);
+                oldcode = buf[k++];
+                bits = buf[k++];
+                newcode = buf[k++] << 8;
+                newcode |= buf[k] & 0xff;
                 p = root;
-                while (bits) {
-                        onebit = (newcode >> (--bits)) & 0x01;
+                while (bits--) {
+                        onebit = (newcode >> bits) & 0x01;
                         if (onebit) {
                                 if (!(q = p->rchild)) {
+                                        if (p->oldcode) {
+                                                syslog(LOG_USER | LOG_INFO, "%s : +++ oldcode=0x%x, i=%d,k=%d,buf[0]=0x%x=0x%x=0x%x=0x%x bits=%d", 
+                                                        __func__, p->oldcode & 0xff, i,k,buf[k-3]&0xff, buf[k-2]&0xff, buf[k-1]&0xff, buf[k]&0xff, bits);
+                                                return -1;
+                                        } 
                                         if (!(q = (struct tree *)malloc(sizeof(struct tree)))) return -1;
                                         q->rchild = NULL;
                                         q->lchild = NULL;
+                                        q->oldcode = 0;
                                         p->rchild = q;
                                 }
                                 p = q;
                         } else {
                                 if (!(q = p->lchild)) {
+                                        if (p->oldcode) {
+                                                syslog(LOG_USER | LOG_INFO, "%s : +++ oldcode=0x%x, i=%d,k=%d,buf[0]=0x%x=0x%x=0x%x=0x%x bits=%d", 
+                                                        __func__, p->oldcode & 0xff, i,k,buf[k-3]&0xff, buf[k-2]&0xff, buf[k-1]&0xff, buf[k]&0xff, bits);
+                                                return -1;
+                                        } 
                                         if (!(q = (struct tree *)malloc(sizeof(struct tree)))) return -1;
                                         q->rchild = NULL;
                                         q->lchild = NULL;
+                                        q->oldcode = 0;
                                         p->lchild = q;
                                 }
                                 p = q;
@@ -777,12 +788,37 @@ int huffman_decompression()
                         printf("i = %d, file_len = %d\n", i, file_len);
                         abit = (buf[i] >> (--preflag)) & 0x01;
                         if (abit) {
+                                syslog(LOG_USER | LOG_INFO, "%s : RR p : %p, p->rchild : %p, p->oldcode=%c=0x%x", __func__, p, p->rchild, p->oldcode,p->oldcode & 0xff);
+                                syslog(LOG_USER | LOG_INFO, "%s : RR p : %p, p->lchild : %p", __func__, p, p->lchild);
                                 p = p->rchild;
                         } else {
+                                //syslog(LOG_USER | LOG_INFO, "%s : LL p : %p, p->rchild : %p", __func__, p, p->rchild);
+                                syslog(LOG_USER | LOG_INFO, "%s : LL p : %p, p->rchild : %p, p->oldcode=%c=0x%x", __func__, p, p->rchild, p->oldcode,p->oldcode & 0xff);
+                                syslog(LOG_USER | LOG_INFO, "%s : LL p : %p, p->lchild : %p", __func__, p, p->lchild);
+                                if (p->oldcode == 0x0d) {
+                                        while (p->lchild) {
+                                                syslog(LOG_USER | LOG_INFO, "%s : xx p : %p, p->lchild : %p, p->rchild : %p, oldcode=0x%x", __func__, p, p->lchild, p->rchild, p->oldcode&0xff);
+                                                if (p->lchild) {
+                                                p=p->lchild;
+                                                } else {
+                                                p=p->rchild;
+                                                }
+                                        }
+                                        while (p->rchild) {
+                                                syslog(LOG_USER | LOG_INFO, "%s : yy p : %p, p->lchild : %p, p->rchild : %p, oldcode=0x%x", __func__, p, p->lchild, p->rchild, p->oldcode&0xff);
+                                                p=p->rchild;
+                                        }
+                                        if (buf) free(buf);
+                                        if (root) free_tree(root); 
+                                        return -1;
+                                }
                                 p = p->lchild;
                         }
+                        if (!p) {
+                                syslog(LOG_USER | LOG_ERR, "%s : ------------------", __func__);
+                        } 
                         if (!preflag) {
-                                syslog(LOG_USER | LOG_INFO, "%s : read buf[%d] = 0x%x", __func__, i, buf[i] & 0xff);
+                                //syslog(LOG_USER | LOG_INFO, "%s : read buf[%d] = 0x%x", __func__, i, buf[i] & 0xff);
                                 ++i;
                                 if (i < (file_len - 1)) {
                                         preflag = ONE_CHAR;
@@ -796,7 +832,7 @@ int huffman_decompression()
                                 }
                         }
                 }
-                syslog(LOG_USER | LOG_INFO, "%s : ** read buf[%d] = 0x%x , preflag = %d, x = %d, ch=%c=0x%x. ", __func__, i, buf[i] & 0xff,preflag, x, p->oldcode, p->oldcode);
+                //syslog(LOG_USER | LOG_INFO, "%s : ** read buf[%d] = 0x%x , preflag = %d, x = %d, ch=%c=0x%x. ", __func__, i, buf[i] & 0xff,preflag, x, p->oldcode, p->oldcode);
                 if (!(p->lchild) && 1 != write(fd, &(p->oldcode), 1)) return -1;
                 x++;
         } while (i < file_len || preflag > 0);

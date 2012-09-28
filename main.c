@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
         //strncpy(header->name, "hello", 5);
         //strncpy(header->version, "1.0", strlen("1.0"));
         strncpy((char *)(tags->fillbits), "Huff", 4);
-        tags->magic = 0;
+        tags->magic = ONE_CHAR << 4;
         tags->bytes1 = 0;
         tags->bytes2 = 0;
         tags->bytes4 = 0;

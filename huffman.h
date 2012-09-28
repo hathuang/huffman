@@ -70,7 +70,7 @@ extern int huffman_encode(char *src, unsigned int length, struct huffman_tags *t
 |                                               |
 |------------------------------------------------
 |         |         |                           |
-| 1 byte  | 1byte   | 1 or 2 bytes(as tags say) |
+| 1 byte  | 1byte   |   2 bytes(as tags say)    |
 |         |         |                           |
 |---------+---------+----------------------------
 |         |         |                           |

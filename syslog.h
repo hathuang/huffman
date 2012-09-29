@@ -175,7 +175,7 @@ CODE facilitynames[] =
 #define LOG_TYPE(type) ((type) >> 4)	/**< get current log type by log mask */
 #define LOG_LEVEL(type) ((type) & 0x0F) /**< get current log level by log mask*/
 
+#define LOG_FILE                "./log.txt"
 extern int init_syslog();
 extern int syslog(int priority,const char * _format,...);
-/*extern int SendLog(int priority,const char *_sysname,const char *_module,int level,const char *_digest,const char *_message,const char *_address,unsigned short port);*/
 #endif // SATLOG_H

@@ -4,95 +4,141 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include "huffman.h"
 #include "syslog.h"
 
-#ifdef Debug
-//#define syslog(x) Syslog(x) 
-//#define init_syslog(x) init_Syslog(x) 
-#else
-//#define syslog(x) do{}while(0)
-//#define init_syslog(x)
-#endif
+#define VERSION                 "1.0"
+#define Author                  "Hat Huang"
+
+#define MODE_TIME               (0x01 << 1)
+#define MODE_DELETE             (0x01 << 3)
+#define MODE_COMPRESSION        (0x01 << 5)
+#define MODE_DECOMPRESSION      (0x01 << 7)
+
+int usage(const char *arg)
+{
+        fprintf(stderr, "\n     Author  : %s", Author);
+        fprintf(stderr, "\n     Version : %s\n\n", VERSION);
+        fprintf(stderr, "Usage : %s [OPTION...] [INPPUT FILE] [OUTPUT FILE]\n", arg);
+        fprintf(stderr, "\nMain operation mode:\n\n");
+        fprintf(stderr, "       -c [compression]\n");
+        fprintf(stderr, "       -x [decompression]\n");
+        fprintf(stderr, "       -d [delete input file]\n");
+        fprintf(stderr, "       -t [time]\n");
+        //fprintf(stderr, "      : -p [password]\n");
+        fflush(stderr);
+        return 0;
+}
 
 int main(int argc, char *argv[])
 {
-        //char buf[64] = "beep boop beer!";
-        //char header_buf[1024];
         char tags_buf[8];
-        int len, ret;
+        int len, ret, fd, mode;
         struct huffman_tags *tags = NULL;
-        init_syslog();        
+        char *buf = NULL, *infile = NULL, *outfile = NULL;
+        unsigned int file_len;
+        struct timeval tv_start, tv_end;
 
-        printf("start to huffman\n");
-        printf("sizeof (struct huffman_header) = %d\n", sizeof(struct huffman_header));
-        printf("sizeof (struct huffman_tags) = %d\n", sizeof(struct huffman_tags));
-        
-        //struct huffman_header *header = (struct huffman_header *)header_buf;
-        tags = (struct huffman_tags *)tags_buf;
-
-        // init the huffman_header
-        //memset(header_buf, 0, sizeof(header_buf));
-        //strncpy(header->name, SRC_FILE, strlen(SRC_FILE));
-        //strncpy(header->name, "hello", 5);
-        //strncpy(header->version, "1.0", strlen("1.0"));
-        strncpy((char *)(tags->fillbits), "Huff", 4);
-        tags->magic = ONE_CHAR << 4;
-        tags->bytes1 = 0;
-        tags->bytes2 = 0;
-        tags->bytes4 = 0;
-                
-        // get buf of the SRC_FILE 
-        char *_buf = NULL;
-
-        FILE *fp = fopen(SRC_FILE, "r"); 
-        if (!fp) {
-                perror("Fail to fopen SRC_FILE");
-                return 0;
+        if (argc != 4 || argv[1][0] != '-' || (len = strlen(argv[1])) <= 1) return usage(argv[0]);
+        mode = 0;
+        ret = 1; // skip '-'
+        while (ret < len) {
+                switch (argv[1][ret++]) {
+                case 'c':
+                        if (mode & MODE_DECOMPRESSION) return usage(argv[0]);
+                        mode |= MODE_COMPRESSION;
+                        break;
+                case 'x':
+                        if (mode & MODE_COMPRESSION) return usage(argv[0]);
+                        mode |= MODE_DECOMPRESSION;
+                        break;
+                case 'd':
+                        mode |= MODE_DELETE;
+                        break;
+                case 't':
+                        mode |= MODE_TIME;
+                        break;
+                default :
+                        return usage(argv[0]);
+                        break;
+                }
         }
+        infile = argv[2];
+        outfile = argv[3];
 
-        fseek(fp, 0, SEEK_END);
-        long file_len = ftell(fp);
-        fclose(fp);
-        //header->size[0] = (file_len >> 0) & 0xff;
-        //header->size[1] = (file_len >> 8) & 0xff;
-        //header->size[2] = (file_len >> 16) & 0xff;
-        //header->size[3] = (file_len >> 24) & 0xff;
-        //file_len = 15; 
-        printf("file length = %ld\n", file_len);
-        _buf = (char *)malloc(file_len * (sizeof(char)));
-        if (_buf == NULL) {
-                perror("Fail to malloc for _buf");
-                return 0;
+        if ((mode & MODE_TIME) && gettimeofday(&tv_start, NULL)) {
+                perror("fail to do gettimeofday");
+                return -1; 
         }
-        int fd = open(SRC_FILE, O_RDWR);
-        if (fd < 0) {
-                perror("Fail to open SRC_FILE.");
-                return 0;
-        }
-        len = 0;
-        while (len < file_len) {
-                ret = read(fd, _buf+len, file_len-len);
-                if (ret <= 0) {
-                        close(fd);
-                        perror("Fail to read SRC_FILE.");
+        init_syslog();
+        if (mode & MODE_COMPRESSION) {
+                // Compression
+                tags = (struct huffman_tags *)tags_buf;
+                strncpy((char *)(tags->fillbits), HUFFMAN_FILE_HEADER, 4);
+                tags->magic = ONE_CHAR << 4;
+                tags->bytes1 = 0;
+                tags->bytes2 = 0;
+                tags->bytes4 = 0;
+                        
+                if ((fd = open(infile, O_RDONLY)) < 0
+                        || (file_len = lseek(fd, 0, SEEK_END)) <= 0
+                        || lseek(fd, 0, SEEK_SET) < 0) {
+                        perror("Fail to open SRC_FILE.");
                         return 0;
                 }
-                len += ret;
-        }
-        //if (*(_buf + file_len - 1) == '\n') {
-        //*(_buf + (--file_len)) = 0;    
-        //} 
 
-        close(fd);
-        //if (huffman_encode(_buf, file_len, header)) {
-        if (huffman_encode(_buf, file_len, tags)) {
-                printf("error to huffman\n");
+                if (!(buf= (char *)malloc(file_len * (sizeof(char))))) {
+                        perror("Fail to malloc for buf");
+                        return 0;
+                }
+
+                len = 0;
+                while (len < file_len) {
+                        if ((ret = read(fd, buf+len, file_len-len)) <= 0) {
+                                close(fd);
+                                perror("Fail to read SRC_FILE.");
+                                return 0;
+                        }
+                        len += ret;
+                }
+                close(fd);
+                if (huffman_compression(outfile, buf, file_len, tags)) {
+                        free(buf);
+                        printf("Error to huffman\n");
+                        return -1;
+                }
+                free(buf);
+        } else if (mode & MODE_DECOMPRESSION) {
+                // Decompression 
+                if (huffman_decompression(infile, outfile)) {
+                        syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_decompression", __func__);
+                        return -1;
+                }
         }
-        free(_buf);
+#ifdef Debug
         printf("Good !\n");
-        
+#else
+        unlink(LOG_FILE);
+#endif
+        if (mode & MODE_DELETE) unlink(infile);
+        if (mode & MODE_TIME) {
+                if (gettimeofday(&tv_end, NULL)) {
+                        perror("\nHuffman done, But fail to get time.");
+                } else {
+                        if (tv_end.tv_usec < tv_start.tv_usec) {
+                                tv_end.tv_usec = 1000000 + tv_end.tv_usec - tv_start.tv_usec;
+                                tv_end.tv_sec -= tv_start.tv_sec + 1; 
+                        } else {
+                                tv_end.tv_usec -= tv_start.tv_usec;
+                                tv_end.tv_sec -= tv_start.tv_sec; 
+                        }
+                        fprintf(stderr, "\nHuffman done time : %u s %u us\n", tv_end.tv_sec, tv_end.tv_usec);
+                        fflush(stderr);
+                }
+        }
+
         return 0;
 }

@@ -8,23 +8,19 @@
 #include <unistd.h>
 #include "syslog.h"
 
-#define LOG_FILE  "./log.txt"
-#define _DEBUG_LEVEL              "DEBUG_LEVEL"
+#define _DEBUG_LEVEL            "DEBUG_LEVEL"
 
 int init_syslog()
 {
-	if(access(LOG_FILE,F_OK | R_OK | W_OK))
-	{
-                int fd;
-		if(-1 == (fd = creat(LOG_FILE,0777)))
-		{
+        int fd;
+	if(access(LOG_FILE,F_OK | R_OK | W_OK)) {
+		if(-1 == (fd = creat(LOG_FILE,0777))) {
 			return -1;
-		}else {
+		} else {
                         close(fd);
                 }
-
-	}else{
-		truncate(LOG_FILE,0);
+	} else {
+		return truncate(LOG_FILE,0);
         }
 
 	return 0;
@@ -35,34 +31,34 @@ int init_syslog()
  * */
 int syslog(int priority, const char *_format,...)
 {
-	int pri=priority&0x00000007;
-	int fac=priority&0x00000078;
+	int pri = priority & 0x00000007;
+	int fac = priority & 0x00000078;
         int DebugLevel = 6;
 	
-        if(DebugLevel < pri)
-		return 0;
+        if(DebugLevel < pri) return 0;
 	
         time_t timestamp;
-	char _timestamp[21]={0};	
+	char _timestamp[21] = {0};	
 	time(&timestamp);
-	struct tm * _tm=localtime(&timestamp);
-	sprintf(_timestamp,"%04d-%02d-%02d %02d:%02d:%02d", _tm->tm_year + 1900, _tm->tm_mon + 1,
-		_tm->tm_mday, _tm->tm_hour, _tm->tm_min, _tm->tm_sec);
+	struct tm * _tm = localtime(&timestamp);
+	sprintf(_timestamp, "%04d-%02d-%02d %02d:%02d:%02d",
+                _tm->tm_year+1900, _tm->tm_mon+1, _tm->tm_mday, _tm->tm_hour, _tm->tm_min, _tm->tm_sec);
 		
-        FILE *_fp=fopen(LOG_FILE,"a+");
+        FILE *_fp = fopen(LOG_FILE,"a+");
         if(!_fp) return -1;
         
         fprintf(_fp, "%s ", _timestamp);
 			
         switch(fac) {
-                case LOG_USER:
-                        fprintf(_fp,"USER ");
-                        break;
-                case LOG_SYSTEM:
-                        fprintf(_fp,"SYSTEM ");
-                        break;
-                default:
-                        fprintf(_fp,"UNKOWN ");
+        case LOG_USER:
+                fprintf(_fp,"USER ");
+                break;
+        case LOG_SYSTEM:
+                fprintf(_fp,"SYSTEM ");
+                break;
+        default:
+                fprintf(_fp,"UNKOWN ");
+                break;
         }
 
         switch(pri) {

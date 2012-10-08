@@ -20,5 +20,6 @@ tags
 *.png
 *.bak
 huffman
+syslog.*
 *.swp
 core

@@ -13,9 +13,7 @@ http://dungenessbin.diandian.com/post/2012-05-23/21949784
 #include "syslog.h"
 
 #ifdef Debug
-#define print_debug(x)     printf(x)
 #else
-#define print_debug(x)
 #endif
 
 static int huffman_line(struct huffman_node **head, char *str, unsigned int length)
@@ -77,21 +75,10 @@ static int huffman_sort(struct huffman_node **head, int flag)
                 q = p;
                 while (q = q->next) {
                         if (p->priority > q->priority) {
-                                p->data = (p->data) ^ (q->data);
-                                q->data = (p->data) ^ (q->data);
-                                p->data = (p->data) ^ (q->data);
-                               
-                                p->bits = (p->bits) ^ (q->bits);
-                                q->bits = (p->bits) ^ (q->bits);
-                                p->bits = (p->bits) ^ (q->bits);
-                                
-                                p->newcode = (p->newcode) ^ (q->newcode);
-                                q->newcode = (p->newcode) ^ (q->newcode);
-                                p->newcode = (p->newcode) ^ (q->newcode);
-
-                                p->priority = (p->priority) ^ (q->priority);
-                                q->priority = (p->priority) ^ (q->priority);
-                                p->priority = (p->priority) ^ (q->priority);
+                                SWAP(p->data, q->data);
+                                SWAP(p->bits, q->bits);
+                                SWAP(p->newcode, q->newcode);
+                                SWAP(p->priority, q->priority);
                         }
                 }
         } while (p = p->next);
@@ -341,11 +328,6 @@ static int huffman_fill_file(const char *file, struct huffman_node *head, struct
                         newchar |= arr[n][1] & ((1 << bits) - 1);
                         continue;
                 } else if (flag >= ONE_CHAR && flag < ONE_SHORT) { // FIXME
-#ifdef Debug
-                        if (bits > ONE_CHAR) {
-                                syslog(LOG_SYSTEM | LOG_ERR, "%s : == bits=%d, flag=%d, newchar=0x%x", __func__, bits, flag, newchar);
-                        }
-#endif
                         newchar = newchar << (ONE_CHAR - (flag - bits));
                         //newchar |= (arr[n][1] >> (flag - ((bits > ONE_CHAR) ? bits : ONE_CHAR))) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
                         newchar |= (arr[n][1] >> (flag - ONE_CHAR)) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
@@ -359,12 +341,6 @@ static int huffman_fill_file(const char *file, struct huffman_node *head, struct
 #endif
                         flag -= ONE_CHAR;
                         newchar = arr[n][1] & ((1 << flag) - 1);
-#ifdef Debug
-                        if (bits > ONE_CHAR) {
-                                syslog(LOG_SYSTEM | LOG_ERR, "%s : == bits=%d, flag=%d, newchar=0x%x, newcode=%c=0x%x",
-                                        __func__, bits, flag, newchar, arr[n][1], arr[n][1]&0xffff);
-                        }
-#endif
                 } else { // >= ONE_SHORT
                         newchar = newchar << (ONE_CHAR - (flag - bits));
                         newchar |= (arr[n][1] >> (flag - ONE_CHAR)) & ((1 << (ONE_CHAR - (flag - bits))) - 1);
@@ -401,19 +377,7 @@ static int huffman_fill_file(const char *file, struct huffman_node *head, struct
                 return -1;
         }
         close(fd);
-#ifdef Debug
-        printf("\n=========== HUFFMAN TAGS: ============\n");
-        printf("tags : fillbits %c=0x%x\n", tags->fillbits[0], tags->fillbits[0]);
-        printf("tags : fillbits %c=0x%x\n", tags->fillbits[1], tags->fillbits[1]);
-        printf("tags : fillbits %c=0x%x\n", tags->fillbits[2], tags->fillbits[2]);
-        printf("tags : fillbits %c=0x%x\n", tags->fillbits[3], tags->fillbits[3]);
 
-        printf("tags : magic %d=0x%x\n", tags->magic, tags->magic);
-        printf("tags : bytes1 %d=0x%x\n", tags->bytes1, tags->bytes1);
-        printf("tags : bytes2 %d=0x%x\n", tags->bytes2, tags->bytes2);
-        printf("tags : bytes4 %d=0x%x\n", tags->bytes4, tags->bytes4);
-        printf("=========== HUFFMAN TAGS: ============\n");
-#endif
         return 0;
 }
 
@@ -444,10 +408,6 @@ static int get_root(char *buf, int n, struct tree *root)
                         if (onebit) {
                                 if (!(q = p->rchild)) {
                                         if (p->oldcode) {
-#ifdef Debug
-                                                syslog(LOG_USER | LOG_INFO, "%s : +++ oldcode=0x%x, i=%d,k=%d,buf[0]=0x%x=0x%x=0x%x=0x%x bits=%d", 
-                                                                __func__, p->oldcode & 0xff, i,k,buf[k-3]&0xff, buf[k-2]&0xff, buf[k-1]&0xff, buf[k]&0xff, bits);
-#endif
                                                 return -1;
                                         }
                                         if (!(q = (struct tree *)malloc(sizeof(struct tree)))) return -1;
@@ -460,12 +420,8 @@ static int get_root(char *buf, int n, struct tree *root)
                         } else {
                                 if (!(q = p->lchild)) {
                                         if (p->oldcode) {
-#ifdef Debug
-                                                syslog(LOG_USER | LOG_INFO, "%s : +++ oldcode=0x%x, i=%d,k=%d,buf[0]=0x%x=0x%x=0x%x=0x%x bits=%d", 
-                                                                __func__, p->oldcode & 0xff, i,k,buf[k-3]&0xff, buf[k-2]&0xff, buf[k-1]&0xff, buf[k]&0xff, bits);
-#endif
                                                 return -1;
-                                        } 
+                                        }
                                         if (!(q = (struct tree *)malloc(sizeof(struct tree)))) return -1;
                                         q->rchild = NULL;
                                         q->lchild = NULL;
@@ -505,16 +461,6 @@ static int huffman_decomp_tree(const char *filename, struct tree **tree, char **
         }
         len = read(fd, buf, HUFFMAN_TAGS_SIZE);
         if (len != HUFFMAN_TAGS_SIZE) return -1;
-#ifdef Debug
-        ret = 0;
-        printf("==============\n");
-        while (ret < HUFFMAN_TAGS_SIZE) {
-                printf("+ tags : buf[%d] = 0x%x\n", ret, buf[ret]&0xff);
-                ret++;
-        }
-        printf("==============\n");
-#endif
-
         tags = (struct huffman_tags *)buf;
         // header check
         if (strncmp((char *)(tags->fillbits), HUFFMAN_FILE_HEADER, 4)) {
@@ -561,13 +507,6 @@ static int huffman_decomp_tree(const char *filename, struct tree **tree, char **
                 len += ret;
         }
         close(fd);
-#ifdef Debug
-        ret = 0;
-        while (ret < filelen) {
-                syslog(LOG_USER | LOG_INFO, "%s : file buf %04d %c=0x%x", __func__, ret, *(*filebuf + ret), *(*filebuf + ret) & 0xff);
-                ++ret;
-        }
-#endif
         // get the tree;
         if (!(root = (struct tree *)malloc(sizeof(struct tree)))) {
                 free(*filebuf);
@@ -579,14 +518,7 @@ static int huffman_decomp_tree(const char *filename, struct tree **tree, char **
         root->lchild = NULL;
         *tree = root;
         *_filelen = filelen;
-#ifdef Debug
-        printf("%s start to get_root\n", __func__);
-        ret = 0;
-        while (ret < codenum) {
-                printf("-0x%x-0x%x-0x%x-0x%x-\n", buf[(ret<<2)+0]&0xff,buf[(ret<<2)+1], buf[(ret<<2)+2]&0xff,buf[(ret<<2)+3]&0xff);
-                ret++;
-        }
-#endif
+
         return get_root(buf, codenum, root); 
 }
 
@@ -611,9 +543,6 @@ int huffman_decompression(const char *infile, const char *outfile)
         int fd;
 
         if (!outfile || !infile) return -1;
-#ifdef Debug
-        printf("%s : Before huffman_decomp_tree\n", __func__);
-#endif
         if (huffman_decomp_tree(infile, &root, &buf, &file_len, &last_ch_bits)) {
                 syslog(LOG_USER | LOG_ERR, "%s : fail to huffman_decomp_tree", __func__);
                 // distory root
@@ -635,64 +564,12 @@ int huffman_decompression(const char *infile, const char *outfile)
                 p = root;
                 while (p->lchild) {
                         if (!(p->rchild)) {
-#ifdef Debug
-                                syslog(LOG_USER | LOG_INFO, "%s : ER p : %p, p->rchild : %p, p->oldcode=%c=0x%x",
-                                        __func__, p, p->rchild, p->oldcode,p->oldcode & 0xff);
-#endif
                                 return -1;
                         } 
                         abit = (buf[i] >> (--preflag)) & 0x01;
                         if (abit) {
-#ifdef Debug
-                                syslog(LOG_USER | LOG_INFO, "%s : RR p : %p, p->rchild : %p, p->oldcode=%c=0x%x",
-                                        __func__, p, p->rchild, p->oldcode,p->oldcode & 0xff);
-                                syslog(LOG_USER | LOG_INFO, "%s : RR p : %p, p->lchild : %p", __func__, p, p->lchild);
-                                if (p->oldcode == 0x0d) {
-                                        while (p->lchild) {
-                                                syslog(LOG_USER | LOG_INFO, "%s : xx p : %p, p->lchild : %p, p->rchild : %p, oldcode=0x%x",
-                                                        __func__, p, p->lchild, p->rchild, p->oldcode&0xff);
-                                                if (p->lchild) {
-                                                        p=p->lchild;
-                                                } else {
-                                                        p=p->rchild;
-                                                }
-                                        }
-                                        while (p->rchild) {
-                                                syslog(LOG_USER | LOG_INFO, "%s : yy p : %p, p->lchild : %p, p->rchild : %p, oldcode=0x%x",
-                                                        __func__, p, p->lchild, p->rchild, p->oldcode&0xff);
-                                                p=p->rchild;
-                                        }
-                                        if (buf) free(buf);
-                                        if (root) free_tree(root); 
-                                        return -1;
-                                }
-#endif
                                 p = p->rchild;
                         } else {
-#ifdef Debug
-                                syslog(LOG_USER | LOG_INFO, "%s : LL p : %p, p->rchild : %p, p->oldcode=%c=0x%x",
-                                        __func__, p, p->rchild, p->oldcode,p->oldcode & 0xff);
-                                syslog(LOG_USER | LOG_INFO, "%s : LL p : %p, p->lchild : %p", __func__, p, p->lchild);
-                                if (p->oldcode == 0x0d) {
-                                        while (p->lchild) {
-                                                syslog(LOG_USER | LOG_INFO, "%s : xx p : %p, p->lchild : %p, p->rchild : %p, oldcode=0x%x",
-                                                        __func__, p, p->lchild, p->rchild, p->oldcode&0xff);
-                                                if (p->lchild) {
-                                                        p=p->lchild;
-                                                } else {
-                                                        p=p->rchild;
-                                                }
-                                        }
-                                        while (p->rchild) {
-                                                syslog(LOG_USER | LOG_INFO, "%s : yy p : %p, p->lchild : %p, p->rchild : %p, oldcode=0x%x",
-                                                        __func__, p, p->lchild, p->rchild, p->oldcode&0xff);
-                                                p=p->rchild;
-                                        }
-                                        if (buf) free(buf);
-                                        if (root) free_tree(root); 
-                                        return -1;
-                                }
-#endif
                                 p = p->lchild;
                         }
                         if (!preflag) {
@@ -737,7 +614,6 @@ int huffman_compression(const char *outfile, char *src, unsigned int length, str
         }
         // make the src in the huffman line
 #ifdef Debug
-        print_debug("start to huffman_line\n");
         syslog(LOG_USER | LOG_INFO, "%s : hello huffman line", __func__);
 #endif
         if (huffman_line(&head, src, length)) {
@@ -746,9 +622,6 @@ int huffman_compression(const char *outfile, char *src, unsigned int length, str
                 return -1;
         }
         // sort the line
-#ifdef Debug
-        print_debug("start to huffman_sort, small first\n");
-#endif
         if (huffman_sort(&head, HUFFMAN_SORT_SMALL_FIRST)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_sort small first", __func__);
                 node_distory(&node);
@@ -756,7 +629,6 @@ int huffman_compression(const char *outfile, char *src, unsigned int length, str
         }
 
 #ifdef Debug
-        printf("start to huffman_tree node : %p, head : %p\n", node, head);
         syslog(LOG_USER | LOG_INFO, "%s : Before huffman_tree", __func__);
 #endif
         if (huffman_tree(&head)) {
@@ -765,9 +637,7 @@ int huffman_compression(const char *outfile, char *src, unsigned int length, str
                 return -1;
         }
 #ifdef Debug
-        print_debug("After huffman_tree\n");
         syslog(LOG_USER | LOG_INFO, "%s : After huffman_tree", __func__);
-        print_debug("start to huffman_code\n");
 #endif
         if (huffman_code(head)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_code", __func__);
@@ -775,18 +645,12 @@ int huffman_compression(const char *outfile, char *src, unsigned int length, str
                 return -1;
         }
         
-#ifdef Debug
-        print_debug("start to huffman_fill_file");
-#endif
         if (huffman_fill_file(outfile, head, tags, src, length)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_fill_file", __func__);
                 return -1;
         } 
         // distory the node, no need any more. 
         huffman_root_distory(head);
-#ifdef Debug
-        print_debug("All goes well...\n");
-#endif
 
         return 0;
 }

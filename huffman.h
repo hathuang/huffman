@@ -40,6 +40,12 @@ struct huffman_tags {
 #define ONE_SHORT                       16
 #define ONE_INT                         32
 
+#define SWAP(x, y)      do {\
+                                (x) = (x) ^ (y);\
+                                (y) = (x) ^ (y);\
+                                (x) = (x) ^ (y);\
+                        } while (0)
+
 extern int huffman_compression(const char *outfile, char *src, unsigned int length, struct huffman_tags *tags);
 extern int huffman_decompression(const char *infile, const char *outfile);
 

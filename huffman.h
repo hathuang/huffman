@@ -3,7 +3,7 @@
 
 struct huffman_node {                   /* example         */
         char data;                      /* char o          */
-        char bits;                      /* bits of newcode 1-32 */
+        char bits;                      /* bits of newcode */
         unsigned short newcode;         /*                 */
         unsigned int priority;          /* 5               */
         struct huffman_node *lnext;     /* ***             */     
@@ -18,16 +18,16 @@ struct tree {
 };
 
 struct huffman_tags {
-        unsigned char fillbits[4];
+        unsigned char fillbits[2];
+        unsigned char password[2];
         unsigned char magic;
         unsigned char bytes1;
         unsigned char bytes2;
         unsigned char bytes4;
 };
 
-/*#define TMP_FILE                        "tmp.huffman"*/
-/*#define SRC_FILE                        "Screenshot.png"*/
-#define HUFFMAN_FILE_HEADER             "Huff"
+/*#define HUFFMAN_FILE_HEADER             "Huff"*/
+#define HUFFMAN_FILE_HEADER             "Hu"
 #define ALL_CHAR                        0x01 
 #define ALL_SHORT                       0x02 
 #define ALL_INT                         0x04 
@@ -35,7 +35,9 @@ struct huffman_tags {
 #define HUFFMAN_SORT_BIG_FIRST          0x01
 #define HUFFMAN_SORT_SMALL_FIRST        0x02
 #define HUFFMAN_HEADER_SIZE             1024
-#define HUFFMAN_TAGS_SIZE               8
+#define HUFFMAN_PWD                     (1<<1)
+#define HUFFMAN_NULL_PWD                (1<<0)
+#define HUFFMAN_TAGS_SIZE               (sizeof(struct huffman_tags)) 
 #define ONE_CHAR                        8
 #define ONE_SHORT                       16
 #define ONE_INT                         32

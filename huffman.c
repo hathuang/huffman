@@ -463,7 +463,7 @@ static int huffman_decomp_tree(const char *filename, struct tree **tree, char **
         if (len != HUFFMAN_TAGS_SIZE) return -1;
         tags = (struct huffman_tags *)buf;
         // header check
-        if (strncmp((char *)(tags->fillbits), HUFFMAN_FILE_HEADER, 4)) {
+        if (strncmp((char *)(tags->fillbits), HUFFMAN_FILE_HEADER, sizeof(tags->fillbits))) {
                 close(fd);
                 fprintf(stderr, "Not a huffman file !\n");
                 fflush(stderr);
@@ -648,8 +648,8 @@ int huffman_compression(const char *outfile, char *src, unsigned int length, str
         if (huffman_fill_file(outfile, head, tags, src, length)) {
                 syslog(LOG_USER | LOG_ERR , "%s : Fail to huffman_fill_file", __func__);
                 return -1;
-        } 
-        // distory the node, no need any more. 
+        }
+        // distory the node. 
         huffman_root_distory(head);
 
         return 0;

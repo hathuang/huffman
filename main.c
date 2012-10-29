@@ -14,6 +14,7 @@
 #define Author                  "Hat Huang"
 
 #define MODE_TIME               (0x01 << 1)
+#define MODE_PASSWORD           (0x01 << 2)
 #define MODE_DELETE             (0x01 << 3)
 #define MODE_COMPRESSION        (0x01 << 5)
 #define MODE_DECOMPRESSION      (0x01 << 7)
@@ -28,14 +29,14 @@ int usage(const char *arg)
         fprintf(stderr, "       -x [decompression]\n");
         fprintf(stderr, "       -d [delete input file]\n");
         fprintf(stderr, "       -t [time]\n");
-        //fprintf(stderr, "      : -p [password]\n");
+        fprintf(stderr, "       -p [password]\n");
         fflush(stderr);
         return 0;
 }
 
 int main(int argc, char *argv[])
 {
-        char tags_buf[8];
+        char tags_buf[sizeof(struct huffman_tags)];
         int len, ret, fd, mode;
         struct huffman_tags *tags = NULL;
         char *buf = NULL, *infile = NULL, *outfile = NULL;
@@ -61,6 +62,9 @@ int main(int argc, char *argv[])
                 case 't':
                         mode |= MODE_TIME;
                         break;
+                case 'p':
+                        mode |= MODE_PASSWORD;
+                        break;
                 default :
                         return usage(argv[0]);
                         break;
@@ -77,7 +81,12 @@ int main(int argc, char *argv[])
         if (mode & MODE_COMPRESSION) {
                 // Compression
                 tags = (struct huffman_tags *)tags_buf;
-                strncpy((char *)(tags->fillbits), HUFFMAN_FILE_HEADER, 4);
+                strncpy((char *)(tags->fillbits), HUFFMAN_FILE_HEADER, sizeof(tags->fillbits));
+                if (mode & MODE_PASSWORD)
+                        tags->password[0] = HUFFMAN_PWD;
+                else
+                        tags->password[0] = HUFFMAN_NULL_PWD;
+                tags->password[1] = 0;
                 tags->magic = ONE_CHAR << 4;
                 tags->bytes1 = 0;
                 tags->bytes2 = 0;
